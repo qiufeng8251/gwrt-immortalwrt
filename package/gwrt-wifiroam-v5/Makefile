@@ -54,7 +54,12 @@ define Package/gwrt-wifiroam-v5/install
 	$(INSTALL_DATA) ./files/usr/share/gwrt/wifiroam-v5/acl.json $(1)/usr/share/gwrt/wifiroam-v5/
 	$(INSTALL_DATA) ./files/usr/share/gwrt/wifiroam-v5/wifiroam.zh-cn.lmo $(1)/usr/share/gwrt/wifiroam-v5/
 	$(INSTALL_DATA) ./files/usr/share/gwrt/wifiroam-v5/views/*.js $(1)/usr/share/gwrt/wifiroam-v5/views/
-	$(CP) -r ./files/usr/share/gwrt/wifiroam-v5/res $(1)/usr/share/gwrt/wifiroam-v5/
+	$(INSTALL_DIR) $(1)/usr/share/gwrt/wifiroam-v5/res
+	$(INSTALL_DATA) ./files/usr/share/gwrt/wifiroam-v5/res/wifiroam.css $(1)/usr/share/gwrt/wifiroam-v5/res/
+	$(INSTALL_DATA) ./files/usr/share/gwrt/wifiroam-v5/res/common.js $(1)/usr/share/gwrt/wifiroam-v5/res/
+	$(INSTALL_DATA) ./files/usr/share/gwrt/wifiroam-v5/res/devices.js $(1)/usr/share/gwrt/wifiroam-v5/res/
+	$(INSTALL_DATA) ./files/usr/share/gwrt/wifiroam-v5/res/modelart.js $(1)/usr/share/gwrt/wifiroam-v5/res/
+	$(INSTALL_DATA) ./files/usr/share/gwrt/wifiroam-v5/res/logos.js $(1)/usr/share/gwrt/wifiroam-v5/res/
 endef
 
 $(eval $(call BuildPackage,gwrt-wifiroam-v5))
