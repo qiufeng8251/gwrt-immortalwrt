@@ -2823,6 +2823,24 @@ function udp_send(obj) {
 		{ address: state.bcast ?? "255.255.255.255", port: UDP_PORT });
 }
 
+// GWRT: 开机时上行可能还没地址（无线回传/中继），distributed 发现依赖上报的 IP
+// 和广播地址，所以在非 CAP 角色下每 10 秒校正一次自己的地址。
+function refresh_self_addr() {
+	if (!state.self || state.cfg.role == "cap") return;
+	let ip = null, mask = 24;
+	let w = ubusc.call("network.interface.wwan", "status");
+	let a = w?.["ipv4-address"]?.[0];
+	if (a?.address) { ip = a.address; mask = a.mask ?? 24; }
+	else {
+		let src = trim(cmd_output("ip -4 route get 1.1.1.1 2>/dev/null | sed -n 's/.* src \\([0-9.]*\\).*/\\1/p'"));
+		if (src != "" && src != "1.1.1.1") ip = src;
+	}
+	if (ip == null || ip == state.self.ip) return;
+	state.self.ip = ip;
+	state.bcast = lan_broadcast(ip, mask);
+	log(sprintf("self ip -> %s (bcast %s)", ip, state.bcast));
+}
+
 function send_hello() {
 	udp_send({
 		magic: MAGIC, ver: 1, role: state.cfg.role,
@@ -5549,6 +5567,7 @@ function main() {
 
 	ubusc.publish("wifiroam", api_obj);
 
+	uloop.interval(HELLO_INTERVAL, refresh_self_addr);
 	uloop.interval(HELLO_INTERVAL, send_hello);
 	uloop.interval(TICK_INTERVAL, sap_tick);
 	uloop.interval(TICK_INTERVAL, sap_report);
