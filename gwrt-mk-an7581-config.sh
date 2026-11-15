@@ -264,6 +264,11 @@ echo "[an7581] daed 依赖：内核 BTF + XDP_SOCKETS:"
 # daed/dae 的内核侧 DEPENDS 是 KERNEL_XDP_SOCKETS（generic config 默认关）。
 # 缺它时 kconfig 会把 daed/luci-app-daed 当成不可见符号，defconfig 静默丢弃
 # 已写入的 CONFIG_PACKAGE_daed=y（261114-03 镜像即因此缺 daed），故一并打开。
+# KERNEL_DEBUG_INFO_BTF 的依赖是 "KERNEL_DEBUG_INFO && !KERNEL_DEBUG_INFO_REDUCED"，
+# 而 airoha 不在 reduced 的 default-n 名单里，默认 KERNEL_DEBUG_INFO_REDUCED=y，
+# 只打开 BTF 会被 kconfig 静默丢弃（261115-01 首跑即报 FAIL: daed needs kernel BTF）。
+grep -q "^# CONFIG_KERNEL_DEBUG_INFO_REDUCED is not set$" "$TOP/.config" || \
+	echo "# CONFIG_KERNEL_DEBUG_INFO_REDUCED is not set" >>"$TOP/.config"
 for sym in CONFIG_KERNEL_DEBUG_INFO_BTF CONFIG_KERNEL_DEBUG_INFO_BTF_MODULES CONFIG_KERNEL_MODULE_ALLOW_BTF_MISMATCH CONFIG_KERNEL_XDP_SOCKETS; do
 	grep -q "^${sym}=y$" "$TOP/.config" || echo "${sym}=y" >>"$TOP/.config"
 done
