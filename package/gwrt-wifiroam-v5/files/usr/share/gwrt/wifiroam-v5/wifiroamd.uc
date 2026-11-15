@@ -1479,6 +1479,27 @@ function wifi_ifaces() {
 	return out;
 }
 
+// GWRT: 主AP 本机各频段的 SSID/密码，组网成功后自动下发给成员 AP。
+// 上游只在「无线设置」保存那一刻推送，配对完成不会自动同步。
+function wifi_push_spec() {
+	let out = [];
+	let cur = uci.cursor();
+	cur.load("wireless");
+	cur.foreach("wireless", "wifi-iface", function(s) {
+		if (s.mode && s.mode != "ap") return;
+		if (s.disabled == "1") return;
+		if (s.wifiroam_guest == "1") return;
+		if (is_backhaul_sec(s[".name"])) return;
+		let ssid = s.ssid ?? "";
+		if (ssid == "") return;
+		push(out, {
+			band: cur.get("wireless", s.device, "band") ?? "?",
+			ssid: ssid, key: s.key ?? "",
+		});
+	});
+	return out;
+}
+
 // 本机各 AP 口的 11k 邻居报告元素：直接取 hostapd 自己生成的 NR（含正确的
 // op_class / channel / PHY 类型），避免自行推算信道分组出错，也保证与 AP
 // 实际信道一致（5G 信道在各 AP 上并不相同）。
@@ -3855,6 +3876,11 @@ function srv_rx(conn, req) {
 				push_guest_to(mn, ga);
 			if (state.cfg.role == "cap")
 				push_offload_to(mn);
+			// GWRT: 认证一成功就下发本机 SSID/密码，无需用户再点保存
+			if (state.cfg.role == "cap") {
+				let ws = wifi_push_spec();
+				if (length(ws) > 0) push_wifi_to(mn, ws);
+			}
 			return 0;
 		}
 		return 0;
@@ -3890,6 +3916,19 @@ function srv_rx(conn, req) {
 		let ga = guest_cfg();
 		if (state.cfg.role == "cap" && p.guest_ver < ga.ver)
 			push_guest_to(mn, ga);
+		// GWRT: 子AP 报上来的 SSID 与主AP 不一致时补发一次（同类补发 5 分钟一次）
+		if (state.cfg.role == "cap") {
+			let ws = wifi_push_spec();
+			let sw = p.info?.wifi ?? [];
+			let drift = false;
+			for (let a in ws)
+				for (let b in sw)
+					if (a.band == b.band && (b.ssid ?? "") != a.ssid) drift = true;
+			if (drift && time() - (p.wifi_push_ts ?? 0) > 300) {
+				p.wifi_push_ts = time();
+				push_wifi_to(mn, ws);
+			}
+		}
 		req.reply({ ok: true, alias_ver: state.aliases.ver,
 		            roam_ver: roam.config_ver, backhaul_ver: bh.config_ver,
 		            names: state.cfg.role == "cap" ? client_names() : {},
