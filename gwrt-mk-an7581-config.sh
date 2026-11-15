@@ -260,8 +260,11 @@ done
 
 # daed 需要内核 BTF：本树没有 vmlinux-btf 包，generic config 默认
 # CONFIG_DEBUG_INFO_BTF is not set，必须显式打开，否则 gwrt-validate-build-config.py 直接 fail。
-echo "[an7581] daed 依赖：内核 BTF:"
-for sym in CONFIG_KERNEL_DEBUG_INFO_BTF CONFIG_KERNEL_DEBUG_INFO_BTF_MODULES CONFIG_KERNEL_MODULE_ALLOW_BTF_MISMATCH; do
+echo "[an7581] daed 依赖：内核 BTF + XDP_SOCKETS:"
+# daed/dae 的内核侧 DEPENDS 是 KERNEL_XDP_SOCKETS（generic config 默认关）。
+# 缺它时 kconfig 会把 daed/luci-app-daed 当成不可见符号，defconfig 静默丢弃
+# 已写入的 CONFIG_PACKAGE_daed=y（261114-03 镜像即因此缺 daed），故一并打开。
+for sym in CONFIG_KERNEL_DEBUG_INFO_BTF CONFIG_KERNEL_DEBUG_INFO_BTF_MODULES CONFIG_KERNEL_MODULE_ALLOW_BTF_MISMATCH CONFIG_KERNEL_XDP_SOCKETS; do
 	grep -q "^${sym}=y$" "$TOP/.config" || echo "${sym}=y" >>"$TOP/.config"
 done
 
@@ -346,6 +349,21 @@ for p in \
 	unset_pkg "$p"
 done
 make defconfig >/dev/null
+
+# defconfig 会静默丢弃依赖不满足的包（连 "# ... is not set" 都不留），
+# 这里对核心插件做硬复检，缺失即失败，避免再交付缺包的镜像。
+echo "[an7581] 核心插件复检:"
+MISSING=""
+for p in daed daed-geoip daed-geosite luci-app-daed \
+	kmod-sched-bpf kmod-xdp-sockets-diag gwrt-tv-adblock luci-theme-gwrt ; do
+	grep -q "^CONFIG_PACKAGE_${p}=y$" "$TOP/.config" || MISSING="$MISSING $p"
+done
+if [ -n "$MISSING" ]; then
+	echo "ERROR: defconfig 后缺少必需包:$MISSING" >&2
+	exit 1
+fi
+grep -q "^CONFIG_KERNEL_XDP_SOCKETS=y$" "$TOP/.config" || {
+	echo "ERROR: CONFIG_KERNEL_XDP_SOCKETS 未生效（daed 会失效）" >&2; exit 1; }
 
 if [ "$OUT" != ".config" ] && [ "$OUT" != "$TOP/.config" ]; then
 	cp "$TOP/.config" "$OUT"
