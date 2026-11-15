@@ -1479,27 +1479,6 @@ function wifi_ifaces() {
 	return out;
 }
 
-// GWRT: 老 GWRT 主AP 把 SSID/密码塞在 push_roam_config 的 wifi 字段里一起下发，
-// 上游 v5 只认独立的 push_wifi_config。这里把两者收敛成同一套校验/落地逻辑。
-function apply_wifi_from_cap(list) {
-	let ssids = [];
-	let bad = false;
-	for (let it in (list ?? [])) {
-		let ssid = trim(it.ssid ?? "");
-		let key = it.key ?? "";
-		if (length(ssid) < 1 || length(ssid) > 32) bad = true;
-		if (key != "" && (length(key) < 8 || length(key) > 64)) bad = true;
-		push(ssids, { band: it.band ?? "?", ssid: ssid, key: key });
-	}
-	if (bad || length(ssids) < 1) return { ok: false, error: "ssid_invalid" };
-	let pairs = [];
-	for (let it in wifi_summary().ifaces)
-		for (let s in ssids)
-			if (s.band == it.band) push(pairs, { old: it.ssid, new: s.ssid });
-	roam_rename_ssids(pairs);
-	return apply_wifi_local(ssids);
-}
-
 // GWRT: 主AP 本机各频段的 SSID/密码，组网成功后自动下发给成员 AP。
 // 上游只在「无线设置」保存那一刻推送，配对完成不会自动同步。
 function wifi_push_spec() {
@@ -1684,6 +1663,33 @@ function roam_rename_ssids(pairs) {
 	cur.set("wifiroam", "roam", "ssids", dedup);
 	cur.commit("wifiroam");
 }
+
+// GWRT: 老 GWRT 主AP 把 SSID/密码塞在 push_roam_config 的 wifi 字段里一起下发，
+// 上游 v5 只认独立的 push_wifi_config。这里把两者收敛成同一套校验/落地逻辑。
+function apply_wifi_from_cap(list) {
+	let ssids = [];
+	let bad = false;
+	for (let it in (list ?? [])) {
+		let ssid = trim(it.ssid ?? "");
+		let key = it.key ?? "";
+		if (length(ssid) < 1 || length(ssid) > 32) bad = true;
+		if (key != "" && (length(key) < 8 || length(key) > 64)) bad = true;
+		push(ssids, { band: it.band ?? "?", ssid: ssid, key: key });
+	}
+	if (bad || length(ssids) < 1) {
+		log(sprintf("wifi from cap: %d entries, invalid", length(ssids)));
+		return { ok: false, error: "ssid_invalid" };
+	}
+	let pairs = [];
+	for (let it in wifi_summary().ifaces)
+		for (let s in ssids)
+			if (s.band == it.band) push(pairs, { old: it.ssid, new: s.ssid });
+	roam_rename_ssids(pairs);
+	let r = apply_wifi_local(ssids);
+	log(sprintf("wifi from cap: %d entries, applied=%d ok=%s", length(ssids), r.count ?? -1, r.ok ? "yes" : "no"));
+	return r;
+}
+
 
 // ------------------------------------------------------- 访客网络
 // 每台 AP 建一个独立访客子网（172.16.10.0/24）+ 自己的 DHCP + 隔离防火墙区。
@@ -3643,6 +3649,7 @@ function sap_rx(req) {
 
 	switch (req.type) {
 	case "push_roam_config": {
+		log(sprintf("roam push recv: wifi=%d", length(req.args.wifi ?? [])));
 		let r = apply_roam_local(req.args.roam, req.args.members ?? []);
 		// GWRT: 老 GWRT 主AP 把 SSID/密码随漫游配置一起下发
 		let w = req.args.wifi;
