@@ -245,6 +245,8 @@ let sap_report, push_aliases_to, push_roam_to, push_backhaul_to, push_offload_to
 let guest_port_sync, guest_after_reload, apply_guest_local, guest_save_local, guest_tick;
 // 需要 local_clients()，只能在它之后绑定；下列函数存在跨前后定义调用
 let appctl_track_macs, online_sample, device_group_refresh, ban_apply, appctl_dpi_daemon;
+// 同名函数定义在本文件更后面，必须先声明再赋值，否则运行时报 undeclared variable
+let local_clients, sap_disconnect, find_client, roam_default_init;
 
 let state = {
 	cfg: {},            // uci wifiroam
@@ -2380,7 +2382,7 @@ function station_bytes(ifname) {
 	return out;
 }
 
-function local_clients() {
+local_clients = function() {
 	let clients = {};
 	let now = time();
 
@@ -2537,7 +2539,7 @@ function local_clients() {
 		clients[mn].since = state.client_seen[mn];
 	}
 	return clients;
-}
+};
 
 // ------------------------------------------------------- physical device groups
 function device_host_key(v) {
@@ -3724,7 +3726,7 @@ function sap_rx(req) {
 	return 0;
 }
 
-function sap_disconnect() {
+sap_disconnect = function() {
 	let link = state.link;
 	if (!link) return;
 	log("link to CAP closed");
@@ -3733,7 +3735,7 @@ function sap_disconnect() {
 	if (link.cap_mac && state.peers[link.cap_mac])
 		state.peers[link.cap_mac].authed = false;
 	state.link = null;
-}
+};
 
 function sap_connect(cap_ip) {
 	sap_disconnect();
@@ -4240,7 +4242,7 @@ push_offload_to = function(mn) {
 };
 
 // ------------------------------------------------------------------ ubus API
-function find_client(key) {
+find_client = function(key) {
 	let local = local_clients();
 	let leases = parse_leases(), neigh = parse_neigh();
 	let best = null;
@@ -4263,7 +4265,7 @@ function find_client(key) {
 	}
 	if (!best) return null;
 	return { node: client_node(best.mn, best.c, best.pmn), ap: best.ap };
-}
+};
 
 // ------------------------------------------------------ internet schedule
 // 定时断网规则存放在 wifiroam 的 ban section：
@@ -5490,7 +5492,7 @@ reconfigure = function() {
 // 自动选中本机全部主网络 SSID，并按默认 k/v/r 参数下发一次。
 // 注意：ucode 的函数声明不做提升，本函数必须定义在 wifi_ifaces /
 // member_list / apply_roam_local / applied_kvr 之后。
-function roam_default_init() {
+roam_default_init = function() {
 	let cur = uci.cursor();
 	cur.load("wifiroam");
 	if (int(cur.get("wifiroam", "roam", "config_ver") ?? "0") != 0) return;
@@ -5518,7 +5520,7 @@ function roam_default_init() {
 		             kvr: applied_kvr(roam.ssids) } ],
 	};
 	log(sprintf("roam defaults enabled for %d SSID(s)", length(ssids)));
-}
+};
 
 function main() {
 	srand(time());
