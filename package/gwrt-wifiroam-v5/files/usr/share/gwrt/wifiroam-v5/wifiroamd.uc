@@ -1479,6 +1479,27 @@ function wifi_ifaces() {
 	return out;
 }
 
+// GWRT: 老 GWRT 主AP 把 SSID/密码塞在 push_roam_config 的 wifi 字段里一起下发，
+// 上游 v5 只认独立的 push_wifi_config。这里把两者收敛成同一套校验/落地逻辑。
+function apply_wifi_from_cap(list) {
+	let ssids = [];
+	let bad = false;
+	for (let it in (list ?? [])) {
+		let ssid = trim(it.ssid ?? "");
+		let key = it.key ?? "";
+		if (length(ssid) < 1 || length(ssid) > 32) bad = true;
+		if (key != "" && (length(key) < 8 || length(key) > 64)) bad = true;
+		push(ssids, { band: it.band ?? "?", ssid: ssid, key: key });
+	}
+	if (bad || length(ssids) < 1) return { ok: false, error: "ssid_invalid" };
+	let pairs = [];
+	for (let it in wifi_summary().ifaces)
+		for (let s in ssids)
+			if (s.band == it.band) push(pairs, { old: it.ssid, new: s.ssid });
+	roam_rename_ssids(pairs);
+	return apply_wifi_local(ssids);
+}
+
 // GWRT: 主AP 本机各频段的 SSID/密码，组网成功后自动下发给成员 AP。
 // 上游只在「无线设置」保存那一刻推送，配对完成不会自动同步。
 function wifi_push_spec() {
@@ -3623,6 +3644,10 @@ function sap_rx(req) {
 	switch (req.type) {
 	case "push_roam_config": {
 		let r = apply_roam_local(req.args.roam, req.args.members ?? []);
+		// GWRT: 老 GWRT 主AP 把 SSID/密码随漫游配置一起下发
+		let w = req.args.wifi;
+		if (type(w) == "array" && length(w) > 0)
+			apply_wifi_from_cap(w);
 		req.reply({ ok: r.ok, ver: r.ver,
 		            kvr: applied_kvr(req.args.roam?.ssids ?? []) });
 		break;
@@ -3644,25 +3669,7 @@ function sap_rx(req) {
 	}
 	case "push_wifi_config": {
 		// CAP 下发的前台 SSID/密码：SAP 按频段改写本地 wireless 并重启无线
-		let ssids = [];
-		let bad = false;
-		for (let it in (req.args.ssids ?? [])) {
-			let ssid = trim(it.ssid ?? "");
-			let key = it.key ?? "";
-			if (length(ssid) < 1 || length(ssid) > 32) bad = true;
-			if (key != "" && (length(key) < 8 || length(key) > 64)) bad = true;
-			push(ssids, { band: it.band ?? "?", ssid: ssid, key: key });
-		}
-		let r = { ok: false, error: "ssid_invalid" };
-		if (!bad && length(ssids) > 0) {
-			let pairs = [];
-			for (let it in wifi_summary().ifaces) {
-				for (let s in ssids)
-					if (s.band == it.band) push(pairs, { old: it.ssid, new: s.ssid });
-			}
-			roam_rename_ssids(pairs);
-			r = apply_wifi_local(ssids);
-		}
+		let r = apply_wifi_from_cap(req.args.ssids);
 		req.reply({ ok: r.ok, error: r.error });
 		break;
 	}
