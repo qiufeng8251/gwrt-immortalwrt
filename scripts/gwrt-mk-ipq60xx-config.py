@@ -41,6 +41,12 @@ def main():
     set_value('TARGET_PREINIT_IP', '"192.168.3.3"')
     set_value('TARGET_PREINIT_BROADCAST', '"192.168.3.255"')
 
+    if args.preset == 'ss01':
+        # 新版 wifiroam v5 覆盖层：装到私有目录，由 97 首启脚本换上
+        set_value('PACKAGE_gwrt-wifiroam-v5', 'y')
+        # 应用管控的 DPI 旁路（NFQUEUE）需要内核队列模块
+        set_value('PACKAGE_kmod-nfnetlink-queue', 'y')
+
     if args.preset != 'ss01':
         # The CS DTS uses the DSA PPE/EDMA path. NSS/SSDK owns the same
         # hardware and must not be installed alongside that path.

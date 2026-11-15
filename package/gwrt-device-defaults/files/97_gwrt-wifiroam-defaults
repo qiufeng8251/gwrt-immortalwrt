@@ -55,6 +55,32 @@ if [ -d "$SRC" ]; then
 	rm -f /tmp/luci-indexcache
 fi
 
+# 1b) wifiroam v5 覆盖层（gwrt-wifiroam-v5 包）：整套换上，老的预置 apk 保持不动
+#     守护进程、四个页面、资源、菜单、ACL、中文翻译都从私有目录拷进来
+V5=/usr/share/gwrt/wifiroam-v5
+if [ -f "$V5/wifiroamd.uc" ] && [ -d /usr/share/wifiroam ]; then
+	cmp -s "$V5/wifiroamd.uc" /usr/share/wifiroam/wifiroamd.uc || \
+		cp -f "$V5/wifiroamd.uc" /usr/share/wifiroam/wifiroamd.uc || exit 1
+	if [ -d "$V5/res" ] && [ -d /www/luci-static/resources/wifiroam ]; then
+		cp -rf "$V5/res/." /www/luci-static/resources/wifiroam/ || exit 1
+	fi
+	for f in topology.js clients.js settings.js advanced.js; do
+		[ -f "$V5/views/$f" ] && [ -d "$VIEW" ] || continue
+		cmp -s "$V5/views/$f" "$VIEW/$f" || cp -f "$V5/views/$f" "$VIEW/$f" || exit 1
+	done
+	[ -f "$V5/menu.json" ] && \
+		cp -f "$V5/menu.json" /usr/share/luci/menu.d/luci-app-wifiroam.json
+	[ -f "$V5/acl.json" ] && \
+		cp -f "$V5/acl.json" /usr/share/rpcd/acl.d/luci-app-wifiroam.json
+	[ -f "$V5/wifiroam.zh-cn.lmo" ] && \
+		cp -f "$V5/wifiroam.zh-cn.lmo" /usr/lib/lua/luci/i18n/wifiroam.zh-cn.lmo
+	/etc/init.d/rpcd reload >/dev/null 2>&1
+	rm -f /tmp/luci-indexcache
+	if [ -x /etc/init.d/wifiroam ]; then
+		/etc/init.d/wifiroam restart >/dev/null 2>&1 || exit 1
+	fi
+fi
+
 # 2) UCI 默认值
 if [ -f /etc/config/wifiroam ]; then
 	uci -q set wifiroam.core.enabled='1' || exit 1
