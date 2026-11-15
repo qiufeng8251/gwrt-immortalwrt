@@ -89,7 +89,14 @@ jobs:
       - name: Free disk space
         run: |
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          # 内核 BTF（daed 必需）关闭了 DEBUG_INFO_REDUCED，DWARF 会让 build_dir 暴涨，
+          # 261115-02 首次带 BTF 构建即因 "Free space left: 0 MB" 失败。这里再腾出
+          # 宿主镜像里的大件（swift/jvm/powershell/az/ghcup/sam/npm 缓存）约 10-15G。
+          sudo rm -rf /usr/share/swift /usr/lib/jvm /usr/local/share/powershell /opt/az \
+            /usr/local/.ghcup /usr/local/aws-sam-cli /opt/pipx /usr/share/miniconda \
+            /usr/local/lib/node_modules/npm/node_modules/npm-audit-report 2>/dev/null || true
           sudo docker image prune -af >/dev/null 2>&1 || true
+          sudo rm -rf ~/.cache/pip ~/.npm /home/runner/.cache 2>/dev/null || true
           sudo apt-get clean
           sudo swapoff -a || true
           sudo rm -f /swapfile
