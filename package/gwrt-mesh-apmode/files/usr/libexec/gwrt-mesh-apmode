@@ -578,7 +578,15 @@ apply_apmode() {
 		uci -q set network.wwan.proto='dhcp'
 		# 默认保持上一版的 NAT 行为；要同网段必须显式打开
 		# uci set gwrt.mesh_apmode.relay=1（默认关闭，改动可逆）
-		if [ "$(uci -q get gwrt.mesh_apmode.relay)" = "1" ] && [ -x /etc/init.d/relayd ]; then
+		# 除了 relayd 本体，netifd 还必须有 relay 协议处理程序：
+		# 本树的 netifd 只带 dhcp/6rd/ppp/wireguard，没有 relay，
+		# 缺了就绝不切 relay（切了 br-lan 会直接没有地址）。
+		relay_proto=0
+		if [ -f /lib/netifd/proto/relay.sh ] || [ -f /usr/lib/netifd/proto/relay.uc ]; then
+			relay_proto=1
+		fi
+		if [ "$(uci -q get gwrt.mesh_apmode.relay)" = "1" ] &&
+			[ -x /etc/init.d/relayd ] && [ "$relay_proto" = "1" ]; then
 			fw_add_wwan
 			uci -q set network.relay='interface'
 			uci -q set network.relay.proto='relay'
@@ -612,7 +620,7 @@ apply_apmode() {
 			/etc/init.d/dnsmasq restart >/dev/null 2>&1
 			ifup wwan >/dev/null 2>&1
 			/etc/init.d/dropbear restart >/dev/null 2>&1
-			log "wireless backhaul: relayd off or missing, router/NAT mode (STA as WAN)"
+			log "wireless backhaul: relayd/proto relay off or missing, router/NAT mode (STA as WAN)"
 		fi
 	fi
 
