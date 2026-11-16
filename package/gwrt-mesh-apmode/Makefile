@@ -18,7 +18,7 @@ define Package/gwrt-mesh-apmode
   SECTION:=utils
   CATEGORY:=Utilities
   TITLE:=GWRT mesh -> real AP mode switch
-  DEPENDS:=+jsonfilter +relayd
+  DEPENDS:=+jsonfilter +relayd +kmod-nfnetlink-queue +libnetfilter-queue
   PKGARCH:=all
 endef
 

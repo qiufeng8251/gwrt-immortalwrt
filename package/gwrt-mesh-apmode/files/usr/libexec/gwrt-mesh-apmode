@@ -513,7 +513,7 @@ repair_ft_bridge_sockets() {
 apply_apmode() {
 	if [ "$1" != "force" ] && in_apmode; then return 0; fi
 
-	local brsec wan_up carrier
+	local brsec wan_up carrier relay_mode=0
 	carrier="$(wan_carrier)"
 	# 纯有线机型：没插网线就是没连上主路由，直接保持路由模式。
 	# 不能掉进下面的无线回传分支（会写 wwan 接口，25s 后回滚，反复折腾配置）。
@@ -597,6 +597,7 @@ apply_apmode() {
 			/etc/init.d/odhcpd enable >/dev/null 2>&1
 			/etc/init.d/odhcpd restart >/dev/null 2>&1
 			/etc/init.d/dropbear restart >/dev/null 2>&1
+			relay_mode=1
 			log "wireless backhaul: relayd pseudo-bridge (same subnet as CAP)"
 		else
 			fw_add_wwan_wan
@@ -615,15 +616,23 @@ apply_apmode() {
 
 	local i=0
 	while [ "$i" -lt 25 ]; do
-		if have_uplink; then
+		# relay 模式下 wwan 一直是 up，不能用它当成功标准，
+		# 必须确认 br-lan 从主AP 真拿到了地址，否则回滚到路由模式。
+		if [ "$relay_mode" = "1" ]; then
+			have_lease
+		else
+			have_uplink
+		fi && {
 			if [ "$carrier" = "1" ]; then
 				log "AP mode ok (wired), br-lan $(ip -4 addr show br-lan | sed -n 's/.*inet \([0-9.]*\).*/\1/p' | head -1)"
 				repair_ft_bridge_sockets
+			elif [ "$relay_mode" = "1" ]; then
+				log "AP mode ok (wireless relay), br-lan $(ip -4 addr show br-lan | sed -n 's/.*inet \([0-9.]*\).*/\1/p' | head -1)"
 			else
-				log "AP mode ok (wireless relay), wwan $(ip -4 addr show 2>/dev/null | sed -n '/phy[0-9]-sta0/,+2 s/.*inet \([0-9.]*\).*/\1/p' | head -1)"
+				log "AP mode ok (wireless NAT), wwan $(ip -4 addr show 2>/dev/null | sed -n '/phy[0-9]-sta0/,+2 s/.*inet \([0-9.]*\).*/\1/p' | head -1)"
 			fi
 			return 0
-		fi
+		}
 		sleep 1
 		i=$((i + 1))
 	done
