@@ -576,7 +576,9 @@ apply_apmode() {
 			uci -q set network.wwan.proto='dhcp'
 		}
 		uci -q set network.wwan.proto='dhcp'
-		if [ -x /etc/init.d/relayd ]; then
+		# 默认保持上一版的 NAT 行为；要同网段必须显式打开
+		# uci set gwrt.mesh_apmode.relay=1（默认关闭，改动可逆）
+		if [ "$(uci -q get gwrt.mesh_apmode.relay)" = "1" ] && [ -x /etc/init.d/relayd ]; then
 			fw_add_wwan
 			uci -q set network.relay='interface'
 			uci -q set network.relay.proto='relay'
@@ -610,7 +612,7 @@ apply_apmode() {
 			/etc/init.d/dnsmasq restart >/dev/null 2>&1
 			ifup wwan >/dev/null 2>&1
 			/etc/init.d/dropbear restart >/dev/null 2>&1
-			log "wireless backhaul: relayd missing, router/NAT mode (STA as WAN)"
+			log "wireless backhaul: relayd off or missing, router/NAT mode (STA as WAN)"
 		fi
 	fi
 
@@ -637,6 +639,13 @@ apply_apmode() {
 		i=$((i + 1))
 	done
 	log "no uplink after 25s, rolling back"
+	# relay 失败就把开关清掉，避免每 5 分钟重试一次、反复断网；
+	# 要再试就重新 uci set gwrt.mesh_apmode.relay=1。
+	if [ "$relay_mode" = "1" ]; then
+		uci -q delete gwrt.mesh_apmode.relay
+		uci -q commit gwrt 2>/dev/null
+		log "relay unavailable here, flag cleared, staying in NAT mode"
+	fi
 	restore_routermode
 	return 1
 }
