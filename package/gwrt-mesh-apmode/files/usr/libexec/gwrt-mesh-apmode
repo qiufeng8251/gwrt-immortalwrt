@@ -406,6 +406,7 @@ load_state() {
 	unset lan_ipaddr_present lan_netmask_present lan_gateway_present lan_dns_present lan_dns_type
 	unset wan_proto wan6_proto wan_ipaddr wan_netmask wan_gateway wan_dns
 	unset wan_ipaddr_present wan_netmask_present wan_gateway_present wan_dns_present wan_dns_type
+	unset dhcp_ra dhcp_dhcpv6 dhcp_ndp dhcp_ra_present dhcp_dhcpv6_present dhcp_ndp_present
 	unset dhcp_ignore db_iface brdev wandev bridged_wandev svc_enabled
 	. "$STATE"
 }
@@ -420,6 +421,9 @@ save_state() {
 		save_option network lan.gateway lan_gateway
 		save_option network lan.dns lan_dns list
 		echo "dhcp_ignore=$(uci -q get dhcp.lan.ignore)"
+		save_option dhcp lan.ra dhcp_ra
+		save_option dhcp lan.dhcpv6 dhcp_dhcpv6
+		save_option dhcp lan.ndp dhcp_ndp
 		echo "wan_proto=$(uci -q get network.wan.proto)"
 		echo "wan6_proto=$(uci -q get network.wan6.proto)"
 		save_option network wan.ipaddr wan_ipaddr
@@ -565,23 +569,48 @@ apply_apmode() {
 		ifup lan >/dev/null 2>&1
 		/etc/init.d/dropbear restart >/dev/null 2>&1
 	else
-		# 无线回传：主AP 的 4addr WDS 不可靠，这里保持路由模式（NAT），
-		# STA 作为 WAN。客户端能上网（同 SSID），但没有无缝漫游。
+		# 无线回传：relayd 做伪桥，br-lan 与主AP 同网段，客户端直接拿主AP 的
+		# DHCP，可以无缝漫游。固件里没有 relayd 时退回 NAT（上一版行为）。
 		uci -q get network.wwan >/dev/null 2>&1 || {
 			uci -q set network.wwan='interface'
 			uci -q set network.wwan.proto='dhcp'
 		}
-		fw_add_wwan_wan
-		uci -q set network.lan.proto='static'
-		uci -q set network.lan.ipaddr='192.168.3.3/24'
-		uci -q delete dhcp.lan.ignore
-		uci -q commit network
-		uci -q commit dhcp
-		/etc/init.d/network reload >/dev/null 2>&1
-		/etc/init.d/dnsmasq restart >/dev/null 2>&1
-		ifup wwan >/dev/null 2>&1
-		/etc/init.d/dropbear restart >/dev/null 2>&1
-		log "wireless backhaul: router/NAT mode (STA as WAN)"
+		uci -q set network.wwan.proto='dhcp'
+		if [ -x /etc/init.d/relayd ]; then
+			fw_add_wwan
+			uci -q set network.relay='interface'
+			uci -q set network.relay.proto='relay'
+			uci -q set network.relay.network='lan wwan'
+			uci -q set network.lan.proto='relay'
+			uci -q set dhcp.lan.ignore='1'
+			uci -q set dhcp.lan.ra='relay'
+			uci -q set dhcp.lan.dhcpv6='relay'
+			uci -q set dhcp.lan.ndp='relay'
+			uci -q commit network
+			uci -q commit dhcp
+			/etc/init.d/network reload >/dev/null 2>&1
+			ifup lan >/dev/null 2>&1
+			ifup wwan >/dev/null 2>&1
+			/etc/init.d/relayd enable >/dev/null 2>&1
+			/etc/init.d/relayd restart >/dev/null 2>&1
+			# IPv6 的 RA/NDP 中继靠 odhcpd，AP_OFF 里停过，这里拉回来
+			/etc/init.d/odhcpd enable >/dev/null 2>&1
+			/etc/init.d/odhcpd restart >/dev/null 2>&1
+			/etc/init.d/dropbear restart >/dev/null 2>&1
+			log "wireless backhaul: relayd pseudo-bridge (same subnet as CAP)"
+		else
+			fw_add_wwan_wan
+			uci -q set network.lan.proto='static'
+			uci -q set network.lan.ipaddr='192.168.3.3/24'
+			uci -q delete dhcp.lan.ignore
+			uci -q commit network
+			uci -q commit dhcp
+			/etc/init.d/network reload >/dev/null 2>&1
+			/etc/init.d/dnsmasq restart >/dev/null 2>&1
+			ifup wwan >/dev/null 2>&1
+			/etc/init.d/dropbear restart >/dev/null 2>&1
+			log "wireless backhaul: relayd missing, router/NAT mode (STA as WAN)"
+		fi
 	fi
 
 	local i=0
@@ -632,6 +661,9 @@ restore_network_only() {
 	else
 		uci -q delete dhcp.lan.ignore
 	fi
+	restore_option dhcp lan.ra "${dhcp_ra_present:-}" "${dhcp_ra-}"
+	restore_option dhcp lan.dhcpv6 "${dhcp_dhcpv6_present:-}" "${dhcp_dhcpv6-}"
+	restore_option dhcp lan.ndp "${dhcp_ndp_present:-}" "${dhcp_ndp-}"
 	[ -n "$wan_proto" ] && uci -q set network.wan.proto="$wan_proto"
 	[ -n "$wan6_proto" ] && uci -q set network.wan6.proto="$wan6_proto"
 	restore_option network wan.ipaddr "${wan_ipaddr_present:-}" "${wan_ipaddr-}"
@@ -692,6 +724,9 @@ restore_routermode() {
 	else
 		uci -q delete dhcp.lan.ignore
 	fi
+	restore_option dhcp lan.ra "${dhcp_ra_present:-}" "${dhcp_ra-}"
+	restore_option dhcp lan.dhcpv6 "${dhcp_dhcpv6_present:-}" "${dhcp_dhcpv6-}"
+	restore_option dhcp lan.ndp "${dhcp_ndp_present:-}" "${dhcp_ndp-}"
 	[ -n "$wan_proto" ] && uci -q set network.wan.proto="$wan_proto"
 	[ -n "$wan6_proto" ] && uci -q set network.wan6.proto="$wan6_proto"
 	restore_option network wan.ipaddr "${wan_ipaddr_present:-}" "${wan_ipaddr-}"

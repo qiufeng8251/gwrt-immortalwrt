@@ -18,7 +18,7 @@ define Package/gwrt-mesh-apmode
   SECTION:=utils
   CATEGORY:=Utilities
   TITLE:=GWRT mesh -> real AP mode switch
-  DEPENDS:=+jsonfilter
+  DEPENDS:=+jsonfilter +relayd
   PKGARCH:=all
 endef
 
@@ -27,7 +27,8 @@ define Package/gwrt-mesh-apmode/description
   main router (CAP): disables the local DHCP server, makes br-lan a DHCP
   client (management IP assigned by the main router) and bridges the wired
   uplink (WAN) into br-lan. Reverts to the normal router (192.168.3.3 +
-  DHCP) when the mesh link is lost.
+  DHCP) when the mesh link is lost. With a wireless backhaul it uses relayd as a
+  pseudo-bridge so br-lan shares the main router's subnet (no double NAT).
 endef
 
 define Build/Compile
