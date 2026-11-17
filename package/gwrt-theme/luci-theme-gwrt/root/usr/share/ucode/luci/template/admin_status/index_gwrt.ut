@@ -43,11 +43,12 @@
 		</div>
 
 		<div class="stat-card gwrt-menu-card-link" data-gwrt="cpu_temp" data-gwrt-menu-target="overview" aria-label="处理器状态，按回车打开概述菜单" tabindex="0">
-			<div class="stat-card-label" id="gwrtAccelCardTitle" data-i18n="CPU · NSS · PPE · 温度">CPU · NSS · PPE · 温度</div>
+			<div class="stat-card-label" id="gwrtAccelCardTitle" data-i18n="CPU · 温度">CPU · 温度</div>
 			<div class="stat-row stat-meter-row"><span class="stat-row-label">CPU</span><div class="mini-bar usage-bar"><div class="mini-bar-fill" id="gwrtCpuBar" style="width:0"></div></div><span class="stat-row-val" id="gwrtCpu">-</span></div>
-			<div class="stat-row stat-meter-row" id="gwrtAccelRow"><span class="stat-row-label" id="gwrtAccelLabel">NSS</span><div class="mini-bar usage-bar"><div class="mini-bar-fill" id="gwrtAccelBar" style="width:0"></div></div><span class="stat-row-val" id="gwrtNss">-</span></div>
+			<div class="stat-row stat-meter-row" id="gwrtAccelRow" style="display:none"><span class="stat-row-label" id="gwrtAccelLabel">NSS</span><div class="mini-bar usage-bar"><div class="mini-bar-fill" id="gwrtAccelBar" style="width:0"></div></div><span class="stat-row-val" id="gwrtNss">-</span></div>
 			<div class="dev-summary-row gwrt-nss-traffic-row" id="gwrtNssTrafficRow" style="display:none"><span class="dev-summary-label">RX</span><span class="dev-summary-num left"><strong id="gwrtNssRx">-</strong></span><span class="dev-summary-sep">|</span><span class="dev-summary-num right"><strong id="gwrtNssTx">-</strong></span><span class="dev-summary-label">TX</span></div>
 			<div class="stat-row stat-meter-row" id="gwrtPpeRow" style="display:none"><span class="stat-row-label" data-i18n="PPE">PPE</span><div class="mini-bar usage-bar"><div class="mini-bar-fill" id="gwrtPpeBar" style="width:0"></div></div><span class="stat-row-val" id="gwrtPpe">-</span></div>
+			<div class="stat-row stat-meter-row" id="gwrtNpuRow" style="display:none"><span class="stat-row-label" data-i18n="NPU">NPU</span><div class="mini-bar usage-bar"><div class="mini-bar-fill" id="gwrtNpuBar" style="width:0"></div></div><span class="stat-row-val" id="gwrtNpu">-</span></div>
 			<div class="stat-row stat-meter-row"><span class="stat-row-label">SoC</span><div class="mini-bar usage-bar"><div class="mini-bar-fill" id="gwrtTempBar" style="width:0"></div></div><span class="stat-row-val" id="gwrtTemp">-</span></div>
 			<div class="stat-row stat-meter-row"><span class="stat-row-label">WiFi</span><div class="mini-bar usage-bar"><div class="mini-bar-fill" id="gwrtWifiTempBar" style="width:0"></div></div><span class="stat-row-val" id="gwrtWifiTemp">-</span></div>
 				<div class="dev-summary-row"><span class="dev-summary-label" data-i18n="SoC">SoC</span><span class="dev-summary-num left"><strong id="gwrtSocModel">-</strong></span><span class="dev-summary-sep">|</span><span class="dev-summary-num right"><strong id="gwrtCoremark" class="gwrt-coremark-run" role="button" tabindex="0" title="点击运行 CoreMark" aria-label="运行 CoreMark 跑分">-</strong></span><span class="dev-summary-label" title="CoreMark">CM</span></div>
@@ -72,15 +73,15 @@
 
 		<div class="stat-card gwrt-click-card" data-gwrt="netspeed" id="gwrtEqosCard" title="点击进入 EQoS 控速">
 			<div class="gwrt-netspeed-head">
-				<div class="stat-card-label">WAN <span id="gwrtWanProto">-</span><span class="gwrt-netspeed-runtime" title="当前 WAN 接口连接时长">已连接 <span id="gwrtWanUptime">-</span></span></div>
+				<div class="stat-card-label">WAN <span id="gwrtWanProto">-</span><span id="gwrtWanSampleState" class="gwrt-wan-sample-state" aria-live="polite">采样中</span><span class="gwrt-netspeed-runtime" title="当前 WAN 接口连接时长">已连接 <span id="gwrtWanUptime">-</span></span></div>
 				<div class="gwrt-netspeed-meta"><span class="gwrt-netspeed-address"><span class="gwrt-netspeed-address-label">IPv4</span><span id="gwrtWanAddr">-</span></span><span class="gwrt-netspeed-address"><span class="gwrt-netspeed-address-label">IPv6</span><span id="gwrtWan6Addr" class="gwrt-wan-ipv6">-</span></span></div>
 			</div>
-			<div class="gwrt-netspeed-rate-row">
-				<span class="gwrt-netspeed-rate-item"><span class="gwrt-netspeed-lbl">↓</span><strong id="gwrtWanDown">-</strong></span>
-				<span class="gwrt-netspeed-total-wrap"><strong class="gwrt-netspeed-total" id="gwrtSpeed">-</strong></span>
-				<span class="gwrt-netspeed-rate-item"><strong id="gwrtWanUp">-</strong><span class="gwrt-netspeed-lbl">↑</span></span>
+			<div class="gwrt-wan-traffic" aria-label="WAN IPv4 与 IPv6 流量">
+				<div class="gwrt-wan-traffic-row gwrt-wan-ipv4"><strong>IPv4</strong><span>↑ <b id="gwrtWan4Up">-</b></span><span>↓ <b id="gwrtWan4Down">-</b></span><span class="gwrt-wan-total">总 <b id="gwrtWan4Total">-</b></span></div>
+				<div class="gwrt-wan-traffic-row gwrt-wan-ipv6"><strong>IPv6</strong><span>↑ <b id="gwrtWan6Up">-</b></span><span>↓ <b id="gwrtWan6Down">-</b></span><span class="gwrt-wan-total">总 <b id="gwrtWan6Total">-</b></span></div>
+				<div class="gwrt-wan-trend" id="gwrtWanTrend" aria-label="IPv4 和 IPv6 上下行合计速率曲线"></div>
+				<div class="gwrt-wan-periods" id="gwrtWanPeriods" aria-label="流量累计与每日记录"></div>
 			</div>
-			<div class="gwrt-wan-trend gwrt-wan-trend-big" id="gwrtWanTrend" aria-label="实时流量趋势"></div>
 		</div>
 
 		<div class="stat-card gwrt-menu-card-link" data-gwrt="devices" data-gwrt-menu-target="net" aria-label="连接设备，按回车打开网络菜单" tabindex="0">
@@ -1688,6 +1689,23 @@ function gwrtClientTrackerFresh(){
   var c=gwrtClientsCache,now=Date.now();
   return c&&c.updated>0&&now-c.time<90000&&Math.abs(now-c.updated*1000)<90000;
 }
+/* The tracker is the source of truth for the total shown in the dashboard
+ * and navbar. Fall back to the already deduplicated view while it refreshes. */
+function gwrtAuthoritativeOnlineCount(devs){
+  if(gwrtClientTrackerFresh()){
+    var tracked=gwrtClientsCache.map||{},count=0;
+    Object.keys(tracked).forEach(function(mac){if(tracked[mac]&&tracked[mac].online===true)count++;});
+    return count;
+  }
+  var seen={},fallback=0;
+  (devs||[]).forEach(function(d){
+    if(!d||!d.online)return;
+    var key=normMac(d.mac)||String(d.ip||d.name||fallback);
+    if(seen[key])return;
+    seen[key]=1;fallback++;
+  });
+  return fallback;
+}
 function gwrtNormalizeDevices(devices){
   var tracked=gwrtClientsCache.map||{},authoritative=gwrtClientTrackerFresh(),byMac={},now=Date.now()/1000;
   var retention=Number(gwrtClientsCache.offlineRetention)||86400;
@@ -1984,18 +2002,28 @@ function ppeUplinkIf(){
   }
   return '';
 }
-function renderPpe(){
+function renderPpe(enabled){
   var row=document.getElementById('gwrtPpeRow');
   if(!row)return;
+  if(!enabled){
+    row.style.display='none';window._gwrtPpePrev=null;return;
+  }
+  /* Capability detection is independent of link state.  Keep the PPE row
+   * visible when WAN is unplugged and show a dash until counters are usable. */
+  row.style.display='';
   var ifn=window._gwrtPpeIf||ppeUplinkIf();
   if(!ifn){
-    row.style.display='none';return;
+    window._gwrtPpePrev=null;
+    if(typeof setUsageBar==='function')setUsageBar('gwrtPpeBar',0);
+    S('gwrtPpe','-');return;
   }
   window._gwrtPpeIf=ifn;
   rpcD('network.device','status',{name:ifn}).then(function(r){
     var d=(r&&r.result&&r.result[1])||r||{},st=d.statistics||{};
     if(d.__rpcError!==undefined||(!d.up&&!d.carrier)){
-      row.style.display='none';window._gwrtPpePrev=null;return;
+      window._gwrtPpePrev=null;
+      if(typeof setUsageBar==='function')setUsageBar('gwrtPpeBar',0);
+      S('gwrtPpe','-');return;
     }
     var rx=Number(st.rx_bytes||0),tx=Number(st.tx_bytes||0);
     var sp=parseInt(String(d.speed||'').replace(/F$/,''),10)||0;   /* Mbps */
@@ -2021,22 +2049,29 @@ function nssStatValue(text,family,name){
   var m=String(text||'').match(new RegExp('^\\s*'+family+'_'+name+'\\s*=\\s*(\\d+)\\s+common','m'));
   return m?Number(m[1]):0;
 }
-function nssTrafficRate(ipv4Res,ipv6Res){
-  var ipv4=ipv4Res&&typeof ipv4Res.data==='string'?ipv4Res.data:'',ipv6=ipv6Res&&typeof ipv6Res.data==='string'?ipv6Res.data:'';
-  var hasRx=/^\s*(?:ipv4|ipv6)_rx_byts\s*=/m.test(ipv4+'\n'+ipv6);
-  var hasTx=/^\s*(?:ipv4|ipv6)_tx_byts\s*=/m.test(ipv4+'\n'+ipv6);
-  var available=hasRx;
-  var traffic={time:Date.now(),rxBytes:nssStatValue(ipv4,'ipv4','rx_byts')+nssStatValue(ipv6,'ipv6','rx_byts'),txBytes:hasTx?nssStatValue(ipv4,'ipv4','tx_byts')+nssStatValue(ipv6,'ipv6','tx_byts'):0};
-  var rxRate=null,txRate=null;
-  if(available&&nssPrev){
-    var elapsed=(traffic.time-nssPrev.time)/1000;
+var nssFamilyPrev={};
+function nssFamilyRate(text,family){
+  var hasRx=new RegExp('^\\s*'+family+'_rx_byts\\s*=','m').test(String(text||''));
+  var hasTx=new RegExp('^\\s*'+family+'_tx_byts\\s*=','m').test(String(text||''));
+  var now=Date.now(),traffic={time:now,rxBytes:nssStatValue(text,family,'rx_byts'),txBytes:nssStatValue(text,family,'tx_byts')};
+  var prev=nssFamilyPrev[family],rxRate=null,txRate=null;
+  if(hasRx&&prev){
+    var elapsed=(now-prev.time)/1000;
     if(elapsed>0.2&&elapsed<30){
-      if(traffic.rxBytes>=nssPrev.rxBytes)rxRate=(traffic.rxBytes-nssPrev.rxBytes)/elapsed;
-      if(hasTx&&traffic.txBytes>=nssPrev.txBytes)txRate=(traffic.txBytes-nssPrev.txBytes)/elapsed;
+      if(traffic.rxBytes>=prev.rxBytes)rxRate=(traffic.rxBytes-prev.rxBytes)/elapsed;
+      if(hasTx&&traffic.txBytes>=prev.txBytes)txRate=(traffic.txBytes-prev.txBytes)/elapsed;
     }
   }
-  nssPrev=traffic;
-  return {available:available,txAvailable:hasTx,rxRate:rxRate,txRate:txRate,byteRate:rxRate===null&&txRate===null?null:(rxRate||0)+(txRate||0)};
+  if(hasRx)nssFamilyPrev[family]=traffic;else delete nssFamilyPrev[family];
+  return {available:hasRx,txAvailable:hasTx,rxBytes:traffic.rxBytes,txBytes:hasTx?traffic.txBytes:0,rxRate:rxRate,txRate:txRate,byteRate:rxRate===null&&txRate===null?null:(rxRate||0)+(txRate||0)};
+}
+function nssTrafficRate(ipv4Res,ipv6Res){
+  var ipv4=ipv4Res&&typeof ipv4Res.data==='string'?ipv4Res.data:'',ipv6=ipv6Res&&typeof ipv6Res.data==='string'?ipv6Res.data:'';
+  var f4=nssFamilyRate(ipv4,'ipv4'),f6=nssFamilyRate(ipv6,'ipv6');
+  var available=f4.available||f6.available,txAvailable=f4.txAvailable||f6.txAvailable;
+  var rxRate=f4.rxRate===null&&f6.rxRate===null?null:(f4.rxRate||0)+(f6.rxRate||0);
+  var txRate=f4.txRate===null&&f6.txRate===null?null:(f4.txRate||0)+(f6.txRate||0);
+  return {available:available,txAvailable:txAvailable,rxRate:rxRate,txRate:txRate,byteRate:rxRate===null&&txRate===null?null:(rxRate||0)+(txRate||0),families:{ipv4:f4,ipv6:f6}};
 }
 var connTrendHist=null;
 function connTrendLoad(){
@@ -3418,101 +3453,101 @@ function renderDhcp(leases,bdev,bOnline,oafUsers,hostHints){
   updateLeasesFoldUi();
 }
 
-/* Previous WAN bytes for rate calculation */
-var wanPrev=null;
-function updateWanRateDisplay(down,up){
-  S('gwrtWanDown',fmtSpeed(down));
-  S('gwrtWanUp',fmtSpeed(up));
-  S('gwrtSpeed',fmtSpeed(down+up));
+/* The router owns sampling and daily accounting. Local cache also paints
+ * the last valid graph immediately while the first RPC is pending. */
+var gwrtWanTraffic=null;
+function wanNumber(n){return n!==null&&n!==undefined&&isFinite(Number(n))&&Number(n)>=0;}
+function wanFamilyPoint(p){return p&&wanNumber(p.up)&&wanNumber(p.down)?Number(p.up)+Number(p.down):null;}
+function wanTrafficValid(d){return d&&d.version===1&&d.families&&wanNumber(d.total)&&Array.isArray(d.history);}
+function gwrtWanTrafficSave(){
+  try{if(gwrtWanTraffic)localStorage.setItem('gwrt_wan_traffic_v2',JSON.stringify(gwrtWanTraffic));}catch(e){}
 }
-function updateWanTraffic(dev,rx,tx){
-  if(!isFinite(rx)||!isFinite(tx))return;
-  var now=Date.now(),down=0,up=0;
-  if(wanPrev&&wanPrev.dev===dev){
-    var elapsed=(now-wanPrev.time)/1000;
-    if(elapsed>0.2&&elapsed<30&&rx>=wanPrev.rx&&tx>=wanPrev.tx){
-      down=(rx-wanPrev.rx)/elapsed;
-      up=(tx-wanPrev.tx)/elapsed;
+function gwrtWanTrafficLoad(){
+  try{var d=JSON.parse(localStorage.getItem('gwrt_wan_traffic_v2')||'null');if(wanTrafficValid(d)){gwrtWanTraffic=d;gwrtWanTraffic.ok=false;renderWanTraffic();}}catch(e){}
+}
+function renderWanTraffic(){
+  var d=gwrtWanTraffic,fresh=!!(d&&d.ok&&Math.abs(Date.now()/1000-Number(d.sampled))<=20);
+  var status=document.getElementById('gwrtWanSampleState');
+  if(status){status.textContent=d?(fresh?'':'稍早数据'):'采样中';status.title=d?'最近有效采样：'+new Date(Number(d.sampled)*1000).toLocaleString():'等待后台采样';}
+  ['ipv4','ipv6'].forEach(function(f){
+    var n=f==='ipv4'?'4':'6',v=d&&d.families[f],known=v&&wanNumber(v.total);
+    S('gwrtWan'+n+'Up',v&&v.available&&wanNumber(v.up)?fmtSpeed(Number(v.up)):'-');
+    S('gwrtWan'+n+'Down',v&&v.available&&wanNumber(v.down)?fmtSpeed(Number(v.down)):'-');
+    S('gwrtWan'+n+'Total',known?F(Number(v.total)):'-');
+  });
+  var periods=document.getElementById('gwrtWanPeriods');
+  if(periods){
+    periods.innerHTML='';
+    if(d){
+      var entries=[{label:'总量',total:Number(d.total)}].concat(Array.isArray(d.periods)?d.periods:[]);
+      entries.forEach(function(p){
+        var total=wanNumber(p.total)?Number(p.total):0,bytes=p.bytes||{};
+        if(!wanNumber(p.total))['up4','down4','up6','down6'].forEach(function(k){total+=Number(bytes[k])||0;});
+        var item=document.createElement('span'),value=document.createElement('b');
+        item.appendChild(document.createTextNode(String(p.label||'')+' '));value.textContent=F(total);item.appendChild(value);
+        item.title='每日记录自 '+new Date(Number(d.first)*1000).toLocaleString()+(p.bytes?'；IPv4 '+F((Number(bytes.up4)||0)+(Number(bytes.down4)||0))+'，IPv6 '+F((Number(bytes.up6)||0)+(Number(bytes.down6)||0)):'；IPv4 与 IPv6 累计合计');
+        periods.appendChild(item);
+      });
     }
   }
-  wanPrev={dev:dev,rx:rx,tx:tx,time:now};
-  updateWanRateDisplay(down,up);
-  pushWanTrend(down+up);
+  renderWanTrend();
+}
+function renderWanTrend(){
+  var el=document.getElementById('gwrtWanTrend');if(!el)return;
+  var h=gwrtWanTraffic&&gwrtWanTraffic.history||[];
+  h=h.filter(function(p){return p&&wanNumber(p.t);}).slice(-60);
+  if(!h.length){el.innerHTML='<span class="gwrt-wan-trend-empty">等待双栈流量采样…</span>';return;}
+  var max=1,w=el.clientWidth||320,hh=el.clientHeight||46,first=Number(h[0].t),last=Number(h[h.length-1].t),span=Math.max(1000,last-first);
+  h.forEach(function(p){['ipv4','ipv6'].forEach(function(f){max=Math.max(max,wanFamilyPoint(p[f])||0);});});
+  function path(f){
+    var prev=null,out='';
+    h.forEach(function(p){
+      var v=wanFamilyPoint(p[f]);if(v===null){prev=null;return;}
+      var x=1+(Number(p.t)-first)/span*(w-2),y=hh-2-v/max*(hh-4);
+      out+=(prev&&Number(p.t)-prev<=20000?' L':' M')+x.toFixed(1)+','+y.toFixed(1);
+      if(!prev)out+=' L'+(x+.1).toFixed(1)+','+y.toFixed(1);
+      prev=Number(p.t);
+    });
+    return out;
+  }
+  el.innerHTML='<svg class="gwrt-wan-trend-svg" viewBox="0 0 '+w+' '+hh+'" preserveAspectRatio="none" aria-hidden="true">'
+    +'<path d="M0,'+(hh/2)+' H'+w+' M0,'+(hh-1)+' H'+w+'" class="gwrt-wan-trend-grid"/>'
+    +'<path data-family="ipv4" d="'+path('ipv4')+'" class="gwrt-wan-line gwrt-wan-line-ipv4"/>'
+    +'<path data-family="ipv6" d="'+path('ipv6')+'" class="gwrt-wan-line gwrt-wan-line-ipv6"/></svg>'
+    +'<span class="gwrt-wan-trend-tip"></span>';
+  var svg=el.querySelector('svg'),tip=el.querySelector('.gwrt-wan-trend-tip');
+  if(svg&&tip){
+    svg.addEventListener('mousemove',function(e){
+      var r=svg.getBoundingClientRect(),x=e.clientX-r.left,t=first+x/Math.max(1,r.width)*span,nearest=h[0];
+      h.forEach(function(p){if(Math.abs(Number(p.t)-t)<Math.abs(Number(nearest.t)-t))nearest=p;});
+      tip.textContent=['ipv4','ipv6'].map(function(f){var p=nearest[f];return (f==='ipv4'?'IPv4':'IPv6')+' ↑'+(p&&wanNumber(p.up)?fmtSpeed(Number(p.up)):'-')+' ↓'+(p&&wanNumber(p.down)?fmtSpeed(Number(p.down)):'-');}).join(' · ');
+      tip.style.opacity='1';
+    });
+    svg.addEventListener('mouseleave',function(){tip.style.opacity='0';});
+  }
+}
+function updateWanTraffic(result){
+  var d=null;try{d=JSON.parse(result&&result.stdout||'null');}catch(e){}
+  if(wanTrafficValid(d)&&Number(d.sampled)>0){
+    if(gwrtWanTraffic&&Array.isArray(gwrtWanTraffic.history)){
+      var history={},merged=[];
+      gwrtWanTraffic.history.concat(d.history).forEach(function(p){if(p&&wanNumber(p.t))history[p.t]=p;});
+      Object.keys(history).sort(function(a,b){return Number(a)-Number(b);}).slice(-60).forEach(function(k){merged.push(history[k]);});
+      d.history=merged;
+    }
+    gwrtWanTraffic=d;
+  }else if(gwrtWanTraffic)gwrtWanTraffic.ok=false;
+  gwrtWanTrafficSave();renderWanTraffic();
 }
 var gwrtOtaChecked=false;
 var gwrtOtaChecking=false;
 var gwrtOtaApplying=false;
 var gwrtOtaCurrentVersion='';
 var gwrtOtaInfo=null;
-var nssPrev=null;
 var refreshInFlight=null;
 
 /* 部分 SoC（如 IPQ6010）的 /sbin/cpuusage 返回空，getCPUUsage 得到 '?'。
    此时退回用 /proc/stat 的增量计算忙碌率。 */
-var gwrtWanTrendHist=[];
-function gwrtWanTrendLoad(){
-  try{var r=localStorage.getItem('gwrt_wan_trend_v1');if(r){var a=JSON.parse(r);if(Array.isArray(a))return a.slice(-60);}}catch(e){}
-  return [];
-}
-function gwrtWanTrendSave(h){try{localStorage.setItem('gwrt_wan_trend_v1',JSON.stringify((h||[]).slice(-60)));}catch(e){}}
-function pushWanTrend(bps){
-  var now=Date.now();
-  var h=gwrtWanTrendHist;
-  if(!h.length)h=gwrtWanTrendLoad();
-  h.push({t:now,v:Math.max(0,Number(bps)||0)});
-  while(h.length>60)h.shift();
-  gwrtWanTrendHist=h;
-  gwrtWanTrendSave(h);
-  renderWanTrend();
-}
-function renderWanTrend(){
-  var el=document.getElementById('gwrtWanTrend');
-  if(!el)return;
-  var h=gwrtWanTrendHist.length?gwrtWanTrendHist:gwrtWanTrendLoad();
-  if(!h.length){el.innerHTML='<span class="gwrt-wan-trend-empty">采样中…</span>';return;}
-  var arr=h.slice();
-  var max=0;arr.forEach(function(p){if(p.v>max)max=p.v;});
-  max=Math.max(max,1);
-  var w=el.clientWidth||260,hh=el.clientHeight||58;
-  var pts=arr.map(function(p,i){
-    var x=arr.length>1?i*(w-2)/(arr.length-1)+1:1;
-    var y=hh-2-(p.v/max)*(hh-4);
-    return x.toFixed(1)+','+y.toFixed(1);
-  }).join(' ');
-  var histHtml=arr.slice().reverse().map(function(p){
-    var d=new Date(p.t);
-    return '<div class="gwrt-wan-trend-hist-row"><span>'+d.toLocaleTimeString('zh-CN',{hour12:false})+'</span><span class="gwrt-wan-trend-hist-down">'+fmtSpeed(p.v)+'</span></div>';
-  }).join('');
-  el.innerHTML='<svg class="gwrt-wan-trend-svg" viewBox="0 0 '+w+' '+hh+'" preserveAspectRatio="none">'
-    +'<defs><linearGradient id="gwrtWanTrendGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="var(--accent-cyan)" stop-opacity=".35"/><stop offset="100%" stop-color="var(--accent-cyan)" stop-opacity="0"/></linearGradient></defs>'
-    +'<path d="M'+(pts.split(' ')[0]||'1,'+(hh-1))+' '+pts.split(' ').slice(1).map(function(pt){return 'L'+pt;}).join(' ')+' L'+(w-1)+','+(hh-1)+' L1,'+(hh-1)+' Z" fill="url(#gwrtWanTrendGrad)"/>'
-    +'<polyline points="'+pts+'" fill="none" stroke="var(--accent-cyan)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>'
-    +'</svg>'
-    +'<div class="gwrt-wan-trend-tip" id="gwrtWanTrendTip"></div>'
-    +'<div class="gwrt-wan-trend-popup"><div class="gwrt-wan-trend-popup-head">实时总流量记录（每 5 秒采样）</div><div class="gwrt-wan-trend-popup-list">'+histHtml+'</div></div>';
-  var svg=el.querySelector('svg');
-  if(svg&&!svg._bound){
-    svg._bound=true;
-    svg.addEventListener('mousemove',function(e){
-      var rect=svg.getBoundingClientRect();
-      var x=e.clientX-rect.left;
-      var idx=Math.round((x/rect.width)*(arr.length-1));
-      idx=Math.max(0,Math.min(arr.length-1,idx));
-      var p2=arr[idx];
-      var tip=document.getElementById('gwrtWanTrendTip');
-      if(tip){
-        var d=new Date(p2.t);
-        tip.textContent=d.toLocaleTimeString('zh-CN',{hour12:false})+'  '+fmtSpeed(p2.v);
-        tip.style.left=Math.min(rect.width-110,Math.max(4,x-55))+'px';
-        tip.style.opacity='1';
-      }
-    });
-    svg.addEventListener('mouseleave',function(){
-      var tip=document.getElementById('gwrtWanTrendTip');
-      if(tip)tip.style.opacity='0';
-    });
-  }
-}
 var gwrtCpuPrev=null;
 function gwrtCpuStatFallback(){
   return rpcD('file','exec',{command:'/bin/cat',params:['/proc/stat']}).then(function(r){
@@ -3547,9 +3582,11 @@ function refresh(){
     rpcD('file','exec',{command:'/bin/cat',params:['/sys/kernel/debug/clk/clk_summary']}),
     rpcD('file','read',{path:'/sys/kernel/debug/qca-nss-drv/stats/ipv4'}),
     rpcD('file','read',{path:'/sys/kernel/debug/qca-nss-drv/stats/ipv6'}),
-    topoBridgePorts()
+    topoBridgePorts(),
+    rpcD('file','exec',{command:'/usr/libexec/gwrt-accelinfo',params:[]}),
+    rpcD('file','exec',{command:'/usr/libexec/gwrt-traffic-daily',params:['read']})
   ]).then(function(r){
-    var board=r[0]||{},si=r[1]||{},cu=r[2]||{},ti=r[3]||{},nd=r[4]||{},dl=r[5]||{},hh=r[6]||{},bp=r[7]||{},bx=r[8]||{},ou=r[9]||{},bc=r[10]||{},cf=r[11]||{},nss4=r[12]||{},nss6=r[13]||{},topoPorts=r[14]||{},clientsMap=gwrtClientsCache.map||{};
+    var board=r[0]||{},si=r[1]||{},cu=r[2]||{},ti=r[3]||{},nd=r[4]||{},dl=r[5]||{},hh=r[6]||{},bp=r[7]||{},bx=r[8]||{},ou=r[9]||{},bc=r[10]||{},cf=r[11]||{},nss4=r[12]||{},nss6=r[13]||{},topoPorts=r[14]||{},accelRpc=r[15]||{},trafficRpc=r[16]||{},clientsMap=gwrtClientsCache.map||{};
     window._gwrtClientsMap=clientsMap;
     window._gwrtTopoBridgePorts=topoPorts;
     var prevModel=window._gwrtBoardModel;
@@ -3616,23 +3653,50 @@ function refresh(){
     if(freqHz>0){
       S('gwrtCpuFreq',freqHz>=1000000000?(freqHz/1000000000).toFixed(2).replace(/\.?0+$/,'')+' GHz':Math.round(freqHz/1000000)+' MHz');
     }else{S('gwrtCpuFreq','-');}
-    renderPpe();
+    var accelCaps=null;
+    try{
+      var accelRaw=String((accelRpc&&accelRpc.stdout)||'').trim();
+      if(accelRaw)accelCaps=JSON.parse(accelRaw);
+    }catch(accelError){accelCaps=null;}
+    /* The helper is authoritative.  Keep a conservative statistics fallback
+     * for an older in-place theme where the helper has not been installed. */
+    var accelProbe=accelCaps&&typeof accelCaps==='object';
+    var nssDetected=accelProbe?accelCaps.nss===true:nss4&&typeof nss4.data==='string'&&/^\s*(?:ipv4|ipv6)_rx_byts\s*=/m.test(String(nss4.data));
+    var ppeDetected=accelProbe?accelCaps.ppe===true:false;
+    var npuDetected=accelProbe?accelCaps.npu===true:false;
     var nss=nssTrafficRate(nss4,nss6);
-    if(nss.available){
-      S('gwrtNss',nm?nm[1]+'%':'-');
-      S('gwrtNssRx',nss.rxRate===null?'采样中':fmtSpeed(nss.rxRate));
-      S('gwrtNssTx',!nss.txAvailable?'-':(nss.txRate===null?'采样中':fmtSpeed(nss.txRate)));
-      setUsageBar('gwrtAccelBar',nm?nm[1]:0);
-    }else{
-      S('gwrtNss',nm?nm[1]+'%':'-');
-      setUsageBar('gwrtAccelBar',nm?nm[1]:0);
-    }
+    renderPpe(ppeDetected);
     var accRow=document.getElementById('gwrtAccelRow'),accLabel=document.getElementById('gwrtAccelLabel'),nssTrafficRow=document.getElementById('gwrtNssTrafficRow');
-    if(accLabel)accLabel.textContent=gwrtIsMtk?'PPE':(nss.available?'NSS':(/HWE:/i.test(cs)?'HWE':'NSS'));
+    if(nssDetected){
+      if(accLabel)accLabel.textContent='NSS';
+      S('gwrtNss',nm?nm[1]+'%':'-');
+      setUsageBar('gwrtAccelBar',nm?nm[1]:0);
+      if(nssTrafficRow){
+        nssTrafficRow.style.display=nss.available?'flex':'none';
+        if(nss.available){
+          S('gwrtNssRx',nss.rxRate===null?'采样中':fmtSpeed(nss.rxRate));
+          S('gwrtNssTx',!nss.txAvailable?'-':(nss.txRate===null?'采样中':fmtSpeed(nss.txRate)));
+        }
+      }
+    }else{
+      if(accRow)accRow.style.display='none';
+      if(nssTrafficRow)nssTrafficRow.style.display='none';
+    }
+    if(accRow&&nssDetected)accRow.style.display='';
+    var npuRow=document.getElementById('gwrtNpuRow');
+    if(npuRow){
+      npuRow.style.display=npuDetected?'':'none';
+      if(npuDetected){S('gwrtNpu','已识别');setUsageBar('gwrtNpuBar',100);}
+    }
     var accTitle=document.getElementById('gwrtAccelCardTitle');
-    if(accTitle&&gwrtIsMtk)accTitle.textContent='CPU · PPE · 温度';
-    if(accRow)accRow.style.display=nss.available||nm?'grid':'none';   /* NSS 未加载则整行隐藏 */
-    if(nssTrafficRow)nssTrafficRow.style.display=nss.available?'flex':'none';
+    if(accTitle){
+      var accelTitleParts=['CPU'];
+      if(nssDetected)accelTitleParts.push('NSS');
+      if(ppeDetected)accelTitleParts.push('PPE');
+      if(npuDetected)accelTitleParts.push('NPU');
+      accelTitleParts.push('温度');
+      accTitle.textContent=accelTitleParts.join(' · ');
+    }
 
     /* Temperature */
     var ts=ti.tempinfo||'';
@@ -3668,13 +3732,14 @@ function refresh(){
     if(socEl&&!socEl.dataset.fetched){
       rpc('file','exec',{command:'/usr/libexec/gwrt-socinfo'}).then(function(res){
         var o=String((res&&res.stdout)||'').split('\n');
-        var chip=String(o[0]||'').trim().toUpperCase();
+        /* The helper reads the board's actual machine/compatible value. Keep
+         * that value intact (lowercase) instead of mapping a guessed model. */
+        var chip=String(o[0]||'').trim().toLowerCase();
         var threads=parseInt(o[1],10)||0;
-        var models={'MT7981':'MT7981B','MT7986':'MT7986A','MT7988':'MT7988A','EN7581':'AN7581','EN7583':'AN7583'};
-        var txt=models[chip]||chip||'';
-        if(threads)txt+=(txt?' \u00d7 ':'')+threads;
+        var txt=chip||'';
+        if(threads)txt+='*'+threads;
         socEl.textContent=txt||board.model||'-';
-        if(threads)socEl.title=threads+' 线程';
+        if(threads)socEl.title=txt;
       }).catch(function(){socEl.textContent=board.model||'-';});
       socEl.dataset.fetched='1';
     }
@@ -3698,7 +3763,7 @@ function refresh(){
     var plusDevices=bandixPlusDevices(bp),bdev=plusDevices.length?plusDevices:((bx&&bx.d)||[]);
     function bOnline(d){return d&&d._bandixPlus?d.online!==false:bandixOnline(d);}
     var devs=mergeDevices(leases,bdev,bOnline,ou,hh);
-    var onlineCount=devs.filter(function(d){return d.online;}).length;
+    var onlineCount=gwrtAuthoritativeOnlineCount(devs);
     S('gwrtDevices',String(onlineCount));
     renderDeviceSummary(devs);
     renderTopDevices(devs);renderActiveDevice(devs);window._gwrtDevs=devs;
@@ -3710,11 +3775,11 @@ function refresh(){
     var mem=si.memory||{},sw=si.swap||{},rt=si.root||{};
     var mt=mem.total||1,mf=(mem.free||0)+(mem.buffered||0)+(mem.cached||0),mp=Math.round(((mt-mf)/mt)*100);
     var mb=document.getElementById('gwrtMemBar');if(mb)mb.style.width=mp+'%';
-    S('gwrtMemVal','剩余 '+F(mf)+' / '+F(mt));
+    S('gwrtMemVal','已用 '+F(Math.max(0,mt-mf))+' / '+F(mt));
 
     var st=sw.total||0,sf=sw.free||0,sp=st>0?Math.round(((st-sf)/st)*100):0;
     var sb=document.getElementById('gwrtSwapBar');if(sb)sb.style.width=sp+'%';
-    S('gwrtSwapVal',st>0?('剩余 '+F(sf)+' / '+F(st)):'-');
+    S('gwrtSwapVal',st>0?('已用 '+F(Math.max(0,st-sf))+' / '+F(st)):'-');
 
     /* DISK: mmcblk data partition mounted under /mnt */
     rpcCached('diskDf',30000,'file','exec',{command:'/bin/df',params:[]}).then(function(r){
@@ -3730,7 +3795,7 @@ function refresh(){
       if(best){
         var dpp=Math.round((best.u/best.t)*100);
         var dbar=document.getElementById("gwrtDiskBar");if(dbar)dbar.style.width=dpp+"%";
-        S("gwrtDiskVal","剩余 "+F(best.t-best.u)+" / "+F(best.t));
+        S("gwrtDiskVal","已用 "+F(best.u)+" / "+F(best.t));
       }
     }).catch(function(){});
     /* ROOTFS: overlay via si.root (no file.exec needed) */
@@ -3738,7 +3803,7 @@ function refresh(){
     if(rfsTotal>0){
       var rfp=Math.round((rfsUsed/rfsTotal)*100);
       var rbar=document.getElementById("gwrtRootfsBar");if(rbar)rbar.style.width=rfp+"%";
-      S("gwrtRootfsVal","剩余 "+F(rfsTotal-rfsUsed)+" / "+F(rfsTotal));
+      S("gwrtRootfsVal","已用 "+F(rfsUsed)+" / "+F(rfsTotal));
     }
 
     /* WAN status and real-time speed */
@@ -3754,27 +3819,14 @@ function refresh(){
       if(!window._gwrtWanUptimeTimer)window._gwrtWanUptimeTimer=setInterval(gwrtWanUptimeTick,1000);
       var wa='';if(wi['ipv4-address']&&wi['ipv4-address'].length>0)wa=wi['ipv4-address'][0].address;
       S('gwrtWanAddr',wa||'-');
-      var dev=wi.l3_device||wi.device;
-      if(!up){wanPrev=null;updateWanRateDisplay(0,0);pushWanTrend(0);}
-      else if(dev&&/^[A-Za-z0-9_.:-]+$/.test(dev)){
-        rpc('network.device','status',{name:dev}).then(function(status){
-          var info=(status&&status.result&&status.result[1])||status||{},stats=info.statistics||{};
-          if(stats.rx_bytes!==undefined&&stats.tx_bytes!==undefined){updateWanTraffic(dev,Number(stats.rx_bytes),Number(stats.tx_bytes));return;}
-          Promise.all([
-            rpc('file','read',{path:'/sys/class/net/'+dev+'/statistics/rx_bytes'}),
-            rpc('file','read',{path:'/sys/class/net/'+dev+'/statistics/tx_bytes'})
-          ]).then(function(counters){
-            var rx=parseInt(String(counters[0]&&counters[0].data||''),10),tx=parseInt(String(counters[1]&&counters[1].data||''),10);
-            if(isFinite(rx)&&isFinite(tx))updateWanTraffic(dev,rx,tx);
-          });
-        });
-      }
+      if(!up)nssFamilyPrev={};
     }else{
       gwrtWanUptimeBase=null;
-      wanPrev=null;S('gwrtWanProto','离线');S('gwrtWanAddr','-');S('gwrtWan6Addr','-');S('gwrtWanUptime','-');
-      updateWanRateDisplay(0,0);pushWanTrend(0);
+      nssFamilyPrev={};S('gwrtWanProto','离线');S('gwrtWanAddr','-');S('gwrtWan6Addr','-');S('gwrtWanUptime','-');
+
     }
-  }).catch(function(e){console.warn('Dashboard refresh:',e);});
+    updateWanTraffic(trafficRpc);
+  }).catch(function(e){updateWanTraffic(null);console.warn('Dashboard refresh:',e);});
   refreshInFlight=Promise.all([portsPromise,dataPromise]).then(function(value){
     refreshInFlight=null;return value;
   },function(error){
@@ -5217,7 +5269,7 @@ if(document.getElementById('gwrtHostname')){
     ev.preventDefault();ev.stopPropagation();
     gwrtOpenDeviceLabel(t.getAttribute('data-gwrt-label-mac'));
   });
-  try{gwrtWanTrendHist=gwrtWanTrendLoad();renderWanTrend();}catch(e){}
+  try{gwrtWanTrafficLoad();}catch(e){}
   resumeDashboard();
   gwrtCheckOta();
   document.addEventListener('visibilitychange',function(){

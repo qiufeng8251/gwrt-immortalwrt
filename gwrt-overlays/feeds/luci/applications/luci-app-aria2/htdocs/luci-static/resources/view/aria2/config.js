@@ -14,6 +14,27 @@ var CBIAria2Status, CBIRpcSecret, CBIRpcUrl;
 const callRcInit = rpc.declare({
 	object: 'rc', method: 'init', params: ['name', 'action']
 });
+const callUciCommit = rpc.declare({
+	object: 'uci', method: 'commit', params: ['config']
+});
+
+function startAria2() {
+	uci.set('aria2', 'main', 'enabled', '1');
+	return uci.save().then(function() {
+		return callUciCommit('aria2');
+	}).then(function(code) {
+		if (code && code !== 0)
+			throw new Error(_('Unable to save Aria2 settings.'));
+		return callRcInit('aria2', 'enable');
+	}).then(function(code) {
+		if (code)
+			throw new Error(_('Unable to enable Aria2.'));
+		return callRcInit('aria2', 'restart');
+	}).then(function(code) {
+		if (code)
+			throw new Error(_('Aria2 start failed; check the download directory and service log.'));
+	});
+}
 
 const callServiceList = rpc.declare({
 	object: 'service',
@@ -46,14 +67,11 @@ CBIAria2Status = form.DummyValue.extend({
 						click: function(event) {
 							event.preventDefault();
 							button.disabled = true;
-							return callRcInit('aria2', 'restart').then(function(code) {
-								if (code)
-									throw new Error(_('Aria2 restart failed; check the service log.'));
-							}).catch(function(error) {
+							return startAria2().catch(function(error) {
 								ui.addNotification(null, E('p', {}, error.message), 'error');
 							}).finally(function() { button.disabled = false; });
 						}
-					}, _('Restart'));
+					}, res.running ? _('Restart') : _('Start'));
 					return E('p', {}, [E('em', {}, message), ' ', button]);
 				}).catch(function() {
 					return E('p', {}, _('Unable to read Aria2 service status.'));
@@ -147,10 +165,35 @@ function getWebFrontInstalled() {
 	});
 }
 
-function openWebInterface(path) {
-	var host = window.location.host;
-	var protocol = window.location.protocol;
-	window.open(protocol + '//' + host + '/' + path);
+function webInterfaceURL(path) {
+	var base = new URL('/' + path + '/', window.location.href);
+	if (path !== 'ariang')
+		return base.href;
+
+	var secure = uci.get('aria2', 'main', 'rpc_secure') === 'true';
+	var port = uci.get('aria2', 'main', 'rpc_listen_port') || '6800';
+	var method = uci.get('aria2', 'main', 'rpc_auth_method');
+	var secret = (method === 'token' || !method)
+		? uci.get('aria2', 'main', 'rpc_secret') || '' : '';
+	var params = new URLSearchParams({
+		protocol: secure ? 'https' : 'http',
+		host: window.location.hostname.replace(/^\[|\]$/g, ''),
+		port: port, interface: 'jsonrpc'
+	});
+	// AriaNg's settings route accepts a UTF-8, base64-encoded secret.
+	params.set('secret', btoa(unescape(encodeURIComponent(secret))));
+	base.hash = '!/settings/rpc/set?' + params.toString();
+	// A plain RPC endpoint cannot be called from an HTTPS page.
+	if (!secure && base.protocol === 'https:') {
+		base.protocol = 'http:';
+		base.port = '';
+	}
+	return base.href;
+}
+
+function openWebInterface(path, event) {
+	if (event) event.preventDefault();
+	window.open(webInterfaceURL(path), '_blank', 'noopener');
 };
 
 function showRPCURL(section_id, useWS, inputEl) {

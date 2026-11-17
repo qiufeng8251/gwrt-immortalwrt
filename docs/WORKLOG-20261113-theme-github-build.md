@@ -44,7 +44,9 @@ Chrome/Playwright 的卡片菜单、响应式端口/色环与 Mesh UI 回归通�
 已触发 `gwrt-build.yml`：SS-01 `261113-01`、model=`jdcloud_re-ss-01`、
 images=`flashable`、release=`false`，运行
 [43262429011](https://github.com/rothdren-lion/gwrt-immortalwrt/actions/runs/43262429011)。
-触发提交为 `ce91005e`；目前已受理，构建结果待跟进。
+触发提交为 `ce91005e`；2026-11-13 后续核对现为 `completed/success`。
+用户已自行刷入，Netcatty 串口 banner 确认版本与主题，详见
+`WORKLOG-20261113-netcatty-serial.md`。本轮没有重新下载或做本地成品拆包。
 仅触发构建，不发布 Release，不刷机或重启。
 
 ## 回滚与限制

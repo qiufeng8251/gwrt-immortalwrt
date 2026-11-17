@@ -144,6 +144,7 @@ while [ ! -e "$FAKE_ROOT/hotplug-release" ]; do sleep 0.05; done
         write_executable(base / 'etc/init.d' / name,
                          '''#!/bin/sh
 printf 'init %s %s\\n' "${0##*/}" "$*" >> "$FAKE_ROOT/calls"
+if [ "$1" = running ]; then exit 1; fi
 if [ "${0##*/}" = gwrt-wifiroam-autopair ] && [ "$1" = start ] && [ -f "$FAKE_ROOT/service-fail" ]; then
   echo failed >> "$FAKE_ROOT/service-failed"
   exit 1
@@ -210,9 +211,10 @@ while [ ! -e "$FAKE_ROOT/s10-release" ]; do sleep 0.05; done
         (base / 'sys/class/ieee80211/phy0').mkdir()
         db = {
             'wireless.radio0': 'wifi-device', 'wireless.radio0.band': '2g',
+            'wireless.radio0.disabled': '1', 'wireless.radio0.country': 'DE',
             'wireless.default_radio0': 'wifi-iface', 'wireless.default_radio0.device': 'radio0',
-            'wireless.default_radio0.mode': 'ap', 'wireless.default_radio0.ssid': 'OpenWrt',
-            'wireless.default_radio0.encryption': 'none',
+            'wireless.default_radio0.mode': 'ap', 'wireless.default_radio0.ssid': 'GWRT_2.4G_4455',
+            'wireless.default_radio0.encryption': 'psk2+ccmp', 'wireless.default_radio0.key': '12345678',
         }
         (base / 'uci.json').write_text(json.dumps(db))
         time.sleep(0.25)
@@ -232,6 +234,8 @@ while [ ! -e "$FAKE_ROOT/s10-release" ]; do sleep 0.05; done
 
         # Finish detection with a custom SSID containing whitespace.
         db.update({'wireless.radio1': 'wifi-device', 'wireless.radio1.band': '5g',
+                   'wireless.radio1.disabled': '1', 'wireless.radio1.country': 'DE',
+                   'wireless.radio1.channel': '100', 'wireless.radio1.htmode': 'HE160',
                    'wireless.default_radio1': 'wifi-iface', 'wireless.default_radio1.device': 'radio1',
                    'wireless.default_radio1.mode': 'ap', 'wireless.default_radio1.ssid': 'My WiFi',
                    'wireless.default_radio1.encryption': 'none'})
@@ -239,12 +243,10 @@ while [ ! -e "$FAKE_ROOT/s10-release" ]; do sleep 0.05; done
         (base / 'wifi-fail').touch()
         (base / 'hotplug-release').touch()
         assert hotplug.wait(timeout=3) == 0
-        wait_until(lambda: (base / 'wifi-failed').exists(), 'failed wireless reload')
-        time.sleep(0.25)
-        assert (defaults / '95_gwrt-wifi-defaults').exists(), 'failed wireless reload was accepted'
+        wait_until(lambda: not (defaults / '95_gwrt-wifi-defaults').exists(), 'wireless readiness')
+        assert not (base / 'wifi-failed').exists(), 'readiness must not request a redundant reload'
+        assert 'wifi reload\n' not in (base / 'calls').read_text()
         (base / 'wifi-fail').unlink()
-        wait_until(lambda: not (defaults / '95_gwrt-wifi-defaults').exists(), 'wireless defaults')
-        assert (base / 'calls').read_text().count('wifi reload\n') >= 2, 'wireless reload was not retried after SSIDs were already named'
         wait_until(lambda: 'apk add' in (base / 'calls').read_text(), 'failed offline install')
         assert (defaults / '96_gwrt-preset-apk').exists()
         assert (defaults / '97_gwrt-wifiroam-defaults').exists()
@@ -281,10 +283,12 @@ while [ ! -e "$FAKE_ROOT/s10-release" ]; do sleep 0.05; done
         assert worker.wait(timeout=10) == 0
         assert not list(defaults.iterdir())
         state = json.loads((base / 'uci.json').read_text())
-        assert state['wireless.radio0.disabled'] == state['wireless.radio1.disabled'] == '0'
-        assert state['wireless.radio0.country'] == state['wireless.radio1.country'] == 'CN'
-        assert state['wireless.radio1.channel'] == '149'
-        assert state['wireless.radio1.htmode'] == 'HE80'
+        assert state['wireless.radio0.disabled'] == state['wireless.radio1.disabled'] == '1'
+        assert state['wireless.radio0.country'] == state['wireless.radio1.country'] == 'DE'
+        assert state['wireless.radio1.channel'] == '100'
+        assert state['wireless.radio1.htmode'] == 'HE160'
+        assert state['wireless.default_radio1.encryption'] == 'none'
+        assert 'wifi reload\n' not in (base / 'calls').read_text()
         assert state['wireless.default_radio0.ssid'] == 'GWRT_2.4G_4455'
         assert state['wireless.default_radio1.ssid'] == 'My WiFi'
         assert state['wireless.default_radio0.encryption'] == 'psk2+ccmp'
@@ -292,7 +296,7 @@ while [ ! -e "$FAKE_ROOT/s10-release" ]; do sleep 0.05; done
         assert 'GWRT_2.4G_4455' in state['wifiroam.roam.ssids']
         assert 'My WiFi' in state['wifiroam.roam.ssids']
         assert 'init wifiroam enable' in (base / 'calls').read_text()
-        assert 'init wifiroam restart' in (base / 'calls').read_text()
+        assert 'init wifiroam start' in (base / 'calls').read_text()
         assert 'init gwrt-wifiroam-autopair start' in (base / 'calls').read_text()
         assert (base / 'etc/gwrt/wifiroam-apk.done').exists()
     finally:

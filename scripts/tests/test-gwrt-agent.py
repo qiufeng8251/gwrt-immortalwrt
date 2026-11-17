@@ -5,9 +5,13 @@ import os
 from pathlib import Path
 import shlex
 import shutil
+import socket
+import ssl
 import subprocess
 import tempfile
+import threading
 import unittest
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 ROOT = Path(__file__).resolve().parents[2]
 SYSROOT = Path(os.environ.get("GWRT_TEST_SYSROOT", "/home/godsun/build/immortalwrt-mt7981/staging_dir/target-aarch64_cortex-a53_musl/root-mediatek"))
@@ -37,10 +41,206 @@ class Agent(unittest.TestCase):
     def tearDownClass(cls):
         cls.temp.cleanup()
 
+    def setUp(self):
+        self.state = self.path / self._testMethodName
+        self.state.mkdir()
+
     def shell(self, code):
         prefix = self.library + "\nJSON_HELPER=" + shlex.quote(str(HELPER)) + "\n"
+        prefix += "STATE_DIR=" + shlex.quote(str(self.state)) + "\n"
         prefix += "log(){ :; }; did(){ echo test-device; }; cfg(){ case \"$1\" in report_interval) echo \"${TEST_INTERVAL:-30}\";; mesh_control) echo 1;; esac; };\n"
         return subprocess.check_output(["busybox", "sh", "-c", prefix + code], env=self.env, text=True).strip()
+
+    def transport(self, code, *, direct=None, tunnel=None):
+        scenario = self.state / "responses.json"
+        scenario.write_text(json.dumps({
+            "direct": direct or {"code": 200, "body": {"ok": True, "route": "ipv6"}},
+            "tunnel": tunnel or {"code": 200, "body": {"ok": True, "route": "tunnel"}},
+        }))
+        mock = self.state / "curl.py"
+        mock.write_text('''import json, pathlib, sys
+args = sys.argv[1:]
+root = pathlib.Path(__file__).parent
+with (root / 'calls.jsonl').open('a') as f:
+    f.write(json.dumps(args) + '\\n')
+url = args[-1]
+route = 'direct' if 'op6.' in url or 'direct.' in url else 'tunnel'
+response = json.loads((root / 'responses.json').read_text())[route]
+body = response.get('body', '')
+if not isinstance(body, str): body = json.dumps(body)
+if '-o' in args:
+    pathlib.Path(args[args.index('-o') + 1]).write_text(body)
+    print(response.get('code', 0), end='')
+else:
+    print(body + '\\n__HTTP__' + str(response.get('code', 0)), end='')
+if response.get('rc'): print('fixture transport failure', file=sys.stderr)
+sys.exit(response.get('rc', 0))
+''')
+        setup = """
+cfg(){
+    case "$1" in
+        endpoint) echo "${TEST_ENDPOINT:-https://op.gwrt.uk}";;
+        endpoint_ipv6) [ -n "$TEST_ENDPOINT_IPV6" ] && echo "$TEST_ENDPOINT_IPV6";;
+        prefer_ipv6) echo "${TEST_PREFER_IPV6:-1}";;
+        pair_token) echo fixture-token;;
+        *) return 1;;
+    esac
+}
+ip(){ case "$*" in '-6 route show default') [ "$TEST_IPV6" != 0 ] && echo 'default via fe80::1 dev wan';; esac; }
+"""
+        setup += "curl(){ python3 " + shlex.quote(str(mock)) + ' "$@"; };\n'
+        output = self.shell(setup + code)
+        calls = self.state / "calls.jsonl"
+        return output, [json.loads(line) for line in calls.read_text().splitlines()] if calls.exists() else []
+
+    def test_transport_prefers_ipv6_with_existing_config(self):
+        out, calls = self.transport("api /api/agent/pull '{}'")
+        self.assertEqual(json.loads(out)["route"], "ipv6")
+        self.assertEqual(len(calls), 1)
+        self.assertIn('-6', calls[0])
+        self.assertEqual(calls[0][-1], 'https://op6.gwrt.uk:8443/api/agent/pull')
+        self.assertNotIn('-k', calls[0])
+        self.assertNotIn('--insecure', calls[0])
+        self.assertEqual(calls[0][calls[0].index('--connect-timeout') + 1], '2')
+        self.assertEqual(calls[0][calls[0].index('-m') + 1], '4')
+
+    def test_transport_failure_falls_back_and_recovers_after_cooldown(self):
+        code = """
+TEST_CLOCK=1000
+date(){ echo "$TEST_CLOCK"; }
+first=$(api /api/agent/pull '{}'); echo "$first"
+second=$(api /api/agent/report '{}'); echo "$second"
+TEST_CLOCK=1061
+third=$(api /api/agent/pull '{}'); echo "$third"
+"""
+        out, calls = self.transport(code, direct={"rc": 6, "code": 0})
+        self.assertEqual([json.loads(line)["route"] for line in out.splitlines()], ['tunnel'] * 3)
+        self.assertEqual([('-6' in call) for call in calls], [True, False, False, True, False])
+        self.assertTrue(all('-4' not in call for call in calls))
+        self.assertTrue(all('Authorization: Bearer fixture-token' in call for call in calls))
+
+    def test_transport_fallback_handles_tls_timeout_and_gateway_failure(self):
+        for response in ({"rc": 28, "code": 0}, {"rc": 60, "code": 0},
+                         {"code": 502, "body": '<html>Bad gateway</html>'},
+                         {"code": 200, "body": '<html>Wrong upstream</html>'}):
+            with self.subTest(response=response):
+                out, calls = self.transport("rm -f \"$STATE_DIR/ipv6-retry\"; api /api/agent/report '{}'", direct=response)
+                self.assertEqual(json.loads(out)["route"], "tunnel")
+                self.assertEqual(calls[-1][-1], 'https://op.gwrt.uk/api/agent/report')
+
+    def test_transport_auth_failure_does_not_retry_or_reset_identity(self):
+        out, calls = self.transport("api /api/agent/ack '{}'; echo RC:$?",
+                                    direct={"code": 401, "body": {"ok": False, "error": "bad token"}})
+        self.assertIn('__API_FAIL__ http 401', out)
+        self.assertTrue(out.endswith('RC:1'))
+        self.assertEqual(len(calls), 1)
+
+    def test_transport_semantic_rejection_does_not_retry(self):
+        out, calls = self.transport("api /api/agent/register '{}'",
+                                    direct={"code": 200, "body": {"ok": False, "error": "identity conflict"}})
+        self.assertFalse(json.loads(out)['ok'])
+        self.assertEqual(len(calls), 1)
+
+    def test_transport_ipv4_only_and_disabled_ipv6_skip_direct(self):
+        out, calls = self.transport("TEST_IPV6=0; api /api/agent/pull '{}'")
+        self.assertEqual(json.loads(out)['route'], 'tunnel')
+        self.assertEqual(len(calls), 1)
+        out, calls = self.transport("TEST_PREFER_IPV6=0; api /api/agent/pull '{}'")
+        self.assertEqual(json.loads(out)['route'], 'tunnel')
+        self.assertEqual(len(calls), 2)
+
+    def test_transport_custom_server_never_uses_official_ipv6(self):
+        out, calls = self.transport("TEST_ENDPOINT=https://private.example/; api /api/agent/pull '{}'")
+        self.assertEqual(json.loads(out)['route'], 'tunnel')
+        self.assertEqual([call[-1] for call in calls], ['https://private.example/api/agent/pull'])
+
+    def test_transport_custom_ipv6_endpoint_is_supported(self):
+        out, calls = self.transport("TEST_ENDPOINT=https://private.example; TEST_ENDPOINT_IPV6=https://direct.example:9443/; api /api/agent/pull '{}'")
+        self.assertEqual(json.loads(out)['route'], 'ipv6')
+        self.assertEqual(calls[0][-1], 'https://direct.example:9443/api/agent/pull')
+
+    def test_transport_both_links_failed_returns_failure(self):
+        out, calls = self.transport("api /api/agent/pull '{}'; echo RC:$?",
+                                    direct={"rc": 7, "code": 0}, tunnel={"rc": 28, "code": 0})
+        self.assertIn('__API_FAIL__', out)
+        self.assertTrue(out.endswith('RC:1'))
+        self.assertEqual(len(calls), 2)
+        self.assertNotIn('fixture-token', out)
+
+    def test_daemon_reports_with_only_an_ipv6_default_route(self):
+        record = self.state / 'reports'
+        self.shell("ensure_device_id(){ :; }; ip(){ case \"$*\" in '-6 route show default') echo default;; esac; }; "
+                   "handle_commands(){ :; }; do_report(){ echo report >> " + shlex.quote(str(record)) +
+                   "; echo '{\"ok\":true}'; }; sleep(){ exit 0; }; daemon")
+        self.assertTrue(record.exists())
+
+    def test_transport_real_https_ipv6_fallback_and_recovery(self):
+        class Handler(BaseHTTPRequestHandler):
+            def log_message(self, *_):
+                pass
+
+            def do_POST(self):
+                self.server.requests.append((self.path, self.headers.get('Authorization'),
+                                             self.rfile.read(int(self.headers['Content-Length']))))
+                response = json.dumps({'ok': self.server.reply_code == 200,
+                                       'route': self.server.route}).encode()
+                self.send_response(self.server.reply_code)
+                self.send_header('Content-Type', 'application/json')
+                self.send_header('Content-Length', str(len(response)))
+                self.end_headers()
+                self.wfile.write(response)
+
+        class IPv6Server(ThreadingHTTPServer):
+            address_family = socket.AF_INET6
+
+        key, cert = self.state / 'test.key', self.state / 'test.crt'
+        subprocess.run(['openssl', 'req', '-x509', '-newkey', 'ed25519', '-nodes', '-days', '1',
+                        '-keyout', str(key), '-out', str(cert), '-subj', '/CN=direct.test',
+                        '-addext', 'subjectAltName=DNS:direct.test,DNS:fallback.test'],
+                       check=True, capture_output=True)
+        servers = [IPv6Server(('::1', 0), Handler), ThreadingHTTPServer(('127.0.0.1', 0), Handler)]
+        tls = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        tls.load_cert_chain(cert, key)
+        for server, route in zip(servers, ('ipv6', 'tunnel')):
+            server.socket = tls.wrap_socket(server.socket, server_side=True)
+            server.reply_code, server.route, server.requests = 200, route, []
+        threads = [threading.Thread(target=server.serve_forever, daemon=True) for server in servers]
+        for thread in threads:
+            thread.start()
+        direct, fallback = servers
+        fixture = "cfg(){ case \"$1\" in endpoint) echo https://fallback.test:" + str(fallback.server_port)
+        fixture += ";; endpoint_ipv6) echo https://direct.test:" + str(direct.server_port)
+        fixture += ";; pair_token) echo fixture-token;; esac; }; ip(){ echo default; };\n"
+        target_curl = SYSROOT / 'usr/bin/curl'
+        curl_args = [QEMU, '-L', str(SYSROOT), str(target_curl)] if target_curl.exists() else ['curl']
+        fixture += 'curl(){ command ' + shlex.join(curl_args) + ' --cacert ' + shlex.quote(str(cert))
+        fixture += ' --resolve ' + shlex.quote('direct.test:' + str(direct.server_port) + ':[::1]')
+        fixture += ' --resolve ' + shlex.quote('fallback.test:' + str(fallback.server_port) + ':127.0.0.1')
+        fixture += ' "$@"; };\n'
+        request = fixture + 'api /api/agent/pull \'{"device_id":"fixture"}\''
+        try:
+            self.assertEqual(json.loads(self.shell(request))['route'], 'ipv6')
+            self.assertEqual(len(fallback.requests), 0)
+            direct.reply_code = 503
+            self.assertEqual(json.loads(self.shell(request))['route'], 'tunnel')
+            direct.reply_code = 200
+            self.assertEqual(json.loads(self.shell(request))['route'], 'tunnel')
+            self.assertEqual(len(direct.requests), 2)  # Cooldown skips the restored direct link.
+            (self.state / 'ipv6-retry').unlink()
+            self.assertEqual(json.loads(self.shell(request))['route'], 'ipv6')
+            self.assertEqual(len(direct.requests), 3)
+            self.assertEqual(len(fallback.requests), 2)
+            for server in servers:
+                for path, auth, body in server.requests:
+                    self.assertEqual(path, '/api/agent/pull')
+                    self.assertEqual(auth, 'Bearer fixture-token')
+                    self.assertEqual(json.loads(body), {'device_id': 'fixture'})
+        finally:
+            for server in servers:
+                server.shutdown()
+                server.server_close()
+            for thread in threads:
+                thread.join()
 
     def helper(self, mode, *args):
         return json.loads(subprocess.check_output([str(self.path / "ucode"), str(HELPER), mode, *map(str, args)], env=self.env, text=True))

@@ -17,4 +17,9 @@ if ! grep -q "/usr/share/gwrt/clients.sh cleanup-daily" "$CRON_FILE" 2>/dev/null
 	/etc/init.d/cron restart 2>/dev/null || /etc/init.d/cron enable 2>/dev/null
 fi
 
+if [ -x /etc/init.d/gwrt-traffic-daily ]; then
+	/etc/init.d/gwrt-traffic-daily enable 2>/dev/null
+	/etc/init.d/gwrt-traffic-daily start 2>/dev/null
+fi
+
 exit 0

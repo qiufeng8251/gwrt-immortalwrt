@@ -27,12 +27,21 @@ if grep -v '^[[:space:]]*#' "$defaults" | grep -q 'ucidef_set_wireless_channel';
 	fail "04_defaults must not call the removed ucidef_set_wireless_channel helper"
 fi
 
-# SS-01 has only the integrated 5G radio and must stay on 5.8GHz / 80MHz.
-grep -q 'jdcloud,re-ss-01)' "$wifi_defaults" ||
-	fail "95_gwrt-wifi-defaults must special-case SS-01"
-grep -q 'wireless.\$radio.channel=149' "$wifi_defaults" ||
-	fail "SS-01 first boot must pin integrated 5G to ch149"
-grep -q 'wireless.\$radio.htmode=HE80' "$wifi_defaults" ||
-	fail "SS-01 first boot must cap integrated 5G at HE80"
+# SS-01 retains its deferred readiness barrier. Radio settings are generated
+# before service startup, rather than written and reloaded by this barrier.
+grep -q 'jdcloud,re-ss-01' "$wifi_defaults" ||
+	fail "95_gwrt-wifi-defaults must retain SS-01 readiness handling"
+if grep -v '^[[:space:]]*#' "$wifi_defaults" | grep -Eq 'uci .* (set|commit)|wifi reload'; then
+	fail "95_gwrt-wifi-defaults must not rewrite or reload generated wireless settings"
+fi
+policy="$root/package/network/config/wifi-scripts/files/lib/wifi/gwrt-defaults.uc"
+grep -Fq 'high ? [149, 36] : [36, 149]' "$policy" ||
+	fail "integrated JDCloud 5G must prefer supported ch149"
+grep -Fq 'for (let width in [80, 40, 20])' "$policy" ||
+	fail "HE radio defaults must cap bandwidth at 80 MHz"
+grep -Fq '+gwrt-wifi-defaults' "$root/package/gwrt-device-defaults/Makefile" ||
+	fail "device defaults must install the generation policy dependency"
+[ -f "$root/package/gwrt-wifi-defaults/files/wifi-defaults.json" ] ||
+	fail "missing shared generation policy"
 
 printf 'PASS: SS-01 mesh preset, board defaults and 5G policy are consistent\n'

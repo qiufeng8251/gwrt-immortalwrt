@@ -9,11 +9,28 @@ cpuinfo_file=${GWRT_SOCINFO_CPUINFO_FILE:-/proc/cpuinfo}
 freq_file=${GWRT_SOCINFO_FREQ_FILE:-/sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq}
 machine_file=${GWRT_SOCINFO_MACHINE_FILE:-/sys/devices/soc0/machine}
 
+# Keep the parser compatible with the BusyBox sed/ash shipped by GWRT.
+# The board machine string is the preferred value (for example IPQ6010),
+# while the device-tree compatible may only expose the family-compatible
+# fallback (qcom,ipq6018).
 soc=$(cat "$machine_file" 2>/dev/null | tr 'ABCDEFGHIJKLMNOPQRSTUVWXYZ' 'abcdefghijklmnopqrstuvwxyz' \
-	| sed -nE 's/^(mt[0-9]+[[:alpha:]]*|ipq[0-9]+[[:alpha:]]*|en[0-9]+[[:alpha:]]*)$/\1/p' | head -n 1)
-[ -n "$soc" ] || soc=$(tr '\0' '\n' < "$compatible_file" 2>/dev/null \
-	| sed -nE 's/^(mediatek|qcom|airoha),(mt[0-9]+[[:alpha:]]*|ipq[0-9]+[[:alpha:]]*|en[0-9]+[[:alpha:]]*)$/\2/p' \
-	| head -n 1)
+	| sed 's/[[:space:]].*$//' | head -n 1)
+case "$soc" in
+	mt[0-9]*|ipq[0-9]*|en[0-9]*) ;;
+	*) soc= ;;
+esac
+if [ -z "$soc" ]; then
+	while IFS= read -r compatible; do
+		case "$compatible" in
+			mediatek,mt[0-9]*|qcom,ipq[0-9]*|airoha,en[0-9]*)
+				soc=${compatible#*,}
+				break
+				;;
+		esac
+	done <<EOF
+$(tr '\0' '\n' < "$compatible_file" 2>/dev/null)
+EOF
+fi
 threads=$(awk '/^processor[[:space:]]*:/ { count++ } END { print count + 0 }' "$cpuinfo_file" 2>/dev/null)
 freq=$(cat "$freq_file" 2>/dev/null || true)
 

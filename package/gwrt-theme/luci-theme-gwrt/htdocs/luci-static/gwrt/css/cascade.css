@@ -509,7 +509,7 @@ body::before{content:"";position:fixed;inset:0;z-index:20000;pointer-events:none
 .gwrt-devcon-lbl{color:var(--text-tertiary);font-weight:700;letter-spacing:.06em}
 .gwrt-devcon-num{font-family:var(--font-mono);font-weight:800;color:var(--text-primary)}
 .gwrt-devcon-sep{color:var(--text-tertiary)}
-.gwrt-devcon-wave{flex:1;min-height:40px;margin-top:2px;border-radius:8px;background:var(--bg-tertiary);overflow:hidden;position:relative}
+.gwrt-devcon-wave{flex:1;min-height:40px;margin-top:2px;border-radius:8px;background:transparent;overflow:hidden;position:relative}
 
 /* 网速卡：IP 右上 + 趋势 */
 .gwrt-netspeed-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
@@ -792,3 +792,55 @@ body[data-page="admin-system-package-manager"] .controls .pager{flex:1 1 100%;mi
 body[data-page="admin-system-package-manager"] .controls .pager > *{flex:0 0 auto;min-width:0}
 body[data-page="admin-system-package-manager"] #packages .cbi-section-actions .btn{width:auto;min-width:0;max-width:100%;padding:6px 9px;font-size:12px;white-space:normal}
 @media(max-width:600px){body.gwrt-embedded:not(.gwrt-embedded-harbor){zoom:.94}body.gwrt-embedded .main > .main-right > #maincontent{padding:8px!important}}
+
+/* Compact live router telemetry in the navigation bar. Keep the original
+ * single-line navbar rhythm: status is plain text with a small divider,
+ * rather than a second row of tall pill cards. */
+.gwrt-navbar-monitor{display:flex;align-items:center;gap:0;min-width:0;flex:1 1 auto;overflow:hidden;color:var(--text-secondary);font-size:clamp(9px,.62rem,11px);line-height:1.2}
+.gwrt-navbar-monitor-item{display:inline-flex;align-items:center;gap:3px;min-width:0;flex:0 1 auto;padding:0 7px;border:0;border-left:1px solid var(--border-primary);border-radius:0;background:transparent;white-space:nowrap}
+.gwrt-navbar-monitor-item:first-child{padding-left:10px;border-left:0}
+.gwrt-navbar-monitor-label{color:var(--text-tertiary);font-weight:600}
+.gwrt-navbar-monitor-item b{font:600 .62rem var(--font-mono);color:var(--text-primary)}
+.gwrt-navbar-monitor-item[data-state="loading"] b,.gwrt-navbar-monitor-item[data-state="unknown"] b{color:var(--text-tertiary)}
+.gwrt-navbar-monitor-item[data-state="ok"] b{color:#4ade80}
+.gwrt-navbar-monitor-item[data-state="warn"] b{color:#fbbf24}
+.gwrt-navbar-monitor-item[data-state="bad"] b{color:#f87171}
+.gwrt-navbar-process-detail{max-width:102px;overflow:hidden;text-overflow:ellipsis;color:var(--text-tertiary);font:500 .55rem var(--font-mono)}
+.gwrt-navbar-processes[data-state="warn"] .gwrt-navbar-process-detail{color:#fbbf24}
+.gwrt-navbar-processes[data-state="bad"] .gwrt-navbar-process-detail{color:#f87171}
+@media(max-width:900px){.gwrt-navbar-monitor-item{padding-left:5px;padding-right:5px}.gwrt-navbar-monitor-item:first-child{padding-left:7px}.gwrt-navbar-process-detail{max-width:72px}}
+@media(max-width:720px){.gwrt-navbar-monitor{gap:0}.gwrt-navbar-monitor-item{padding-left:4px;padding-right:4px}.gwrt-navbar-monitor-label{font-size:.55rem}.gwrt-navbar-monitor-item b{font-size:.56rem}.gwrt-navbar-process-detail{display:inline;max-width:90px;font-size:.52rem}}
+@media(max-width:520px){.gwrt-navbar-monitor{flex-basis:100%;order:3;overflow:visible;justify-content:flex-start}.gwrt-navbar-monitor-item{padding:0 4px}.gwrt-navbar-monitor-item:first-child{padding-left:0}.luci-navbar .fill>.container{flex-wrap:wrap;align-content:center;row-gap:0}.luci-navbar .flex1{flex:1 1 calc(100% - 112px);min-width:0;flex-wrap:wrap;align-content:center;row-gap:0}.navbar-controls{flex:0 0 auto}.gwrt-navbar-monitor-item{max-width:none}}
+
+/* r122: one WAN graph, with IPv4/IPv6 on the same scale. */
+.gwrt-wan-traffic{display:flex;flex-direction:column;flex:1;gap:3px;min-height:0;margin-top:2px}
+.gwrt-wan-traffic-row{display:grid;grid-template-columns:38px minmax(0,1fr) minmax(0,1fr) auto;align-items:baseline;gap:6px;line-height:1.25;white-space:nowrap;font:500 .64rem var(--font-mono);color:var(--text-secondary)}
+.gwrt-wan-traffic-row>strong{font-size:.65rem;font-weight:700}
+.gwrt-wan-traffic-row b{font-size:.68rem;font-weight:600;color:var(--text-primary)}
+.gwrt-wan-ipv4>strong{color:#22b8cf}.gwrt-wan-ipv6>strong{color:#a78bfa}
+.gwrt-wan-traffic-row>span{min-width:0;overflow:hidden;text-overflow:ellipsis}
+.gwrt-wan-total{text-align:right}
+.gwrt-wan-trend{position:relative;flex:1;min-height:30px;overflow:hidden;margin:1px 0}
+.gwrt-wan-trend-svg{display:block;width:100%;height:100%}
+.gwrt-wan-trend-grid{fill:none;stroke:var(--border-primary);stroke-width:.5}
+.gwrt-wan-line{fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;vector-effect:non-scaling-stroke}
+.gwrt-wan-line-ipv4{stroke:#22b8cf}.gwrt-wan-line-ipv6{stroke:#a78bfa}
+.gwrt-wan-trend-empty{display:flex;align-items:center;justify-content:center;height:100%;font-size:.6rem;color:var(--text-tertiary)}
+.gwrt-wan-trend-tip{position:absolute;left:3px;bottom:1px;max-width:calc(100% - 6px);overflow:hidden;text-overflow:ellipsis;padding:2px 4px;border-radius:3px;background:var(--bg-card);font:500 .55rem var(--font-mono);color:var(--text-primary);opacity:0;pointer-events:none;white-space:nowrap}
+.gwrt-wan-periods{display:flex;flex-wrap:wrap;gap:2px 10px;min-height:12px;color:var(--text-tertiary);font-size:.56rem;line-height:1.2}
+.gwrt-wan-periods>span{white-space:nowrap}.gwrt-wan-periods b{font:500 .56rem var(--font-mono);color:var(--text-secondary)}
+.gwrt-wan-sample-state{margin-left:5px;font-size:.5rem;font-weight:400;letter-spacing:0;color:var(--text-tertiary)}
+@media(max-width:640px){.gwrt-wan-traffic-row{gap:4px;font-size:.59rem;grid-template-columns:34px minmax(0,1fr) minmax(0,1fr) auto}.gwrt-wan-traffic-row b{font-size:.62rem}.gwrt-wan-traffic-row>strong{font-size:.61rem}.gwrt-wan-periods{gap:2px 8px}}
+@media(max-width:720px){.gwrt-navbar-monitor{flex-wrap:wrap;row-gap:2px}.gwrt-navbar-monitor-item{flex-shrink:0}.gwrt-navbar-process-detail{max-width:110px}}
+@media(max-width:520px){.gwrt-navbar-monitor{font-size:.52rem;line-height:1.1}.gwrt-navbar-monitor-item{padding:0 3px}.gwrt-navbar-monitor-label{font-size:.51rem}.gwrt-navbar-monitor-item b{font-size:.52rem}}
+
+/* r123: fixed aggregates in the existing upper bar; model artwork uses the existing node sizes. */
+.gwrt-navbar-traffic{display:contents}
+.gwrt-navbar-traffic b{color:var(--text-primary)}
+.gwrt-wan-trend{background:transparent}
+.gwrt-product-art{display:inline-flex;width:100%;height:100%;align-items:center;justify-content:center}
+.gwrt-router-product{display:block;width:100%;height:100%;max-width:100%;object-fit:contain;filter:none!important}
+.gwrt-router-product[hidden],.gwrt-product-fallback[hidden]{display:none!important}
+.gwrt-product-fallback{display:inline-flex;align-items:center;justify-content:center;width:100%;height:100%}
+.topo-dev-icon .gwrt-product-art{width:28px;height:28px}
+.gwrt-mesh-ap-icon:has(.gwrt-router-product:not([hidden])){border-color:transparent}

@@ -44,7 +44,6 @@ def main():
     if args.preset == 'ss01':
         # 新版 wifiroam v5 覆盖层：装到私有目录，由 97 首启脚本换上
         set_value('PACKAGE_gwrt-wifiroam-v5', 'y')
-        set_value('PACKAGE_gwrt-wifiroam-v5-art', 'y')
         # 应用管控的 DPI 旁路（NFQUEUE）需要内核队列模块
         set_value('PACKAGE_kmod-nfnetlink-queue', 'y')
 

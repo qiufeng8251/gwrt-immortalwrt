@@ -1,14 +1,33 @@
 #!/bin/sh
 # Read-only dashboard export. Access is granted only through rpcd's
 # authenticated file.exec ACL; never place client data under /www or public /tmp.
-runtime_dir=$(/usr/libexec/gwrt-runtime-dir 2>/dev/null) || {
-	printf '%s\n' '{"updated":0,"clients":[]}'
-	exit 0
-}
-state=$runtime_dir/clients.json
+state=''
 
-if [ -f "$state" ] && [ ! -L "$state" ] && [ -r "$state" ] \
-	&& jsonfilter -i "$state" -e '@.clients' >/dev/null 2>&1; then
+# Newer GWRT clients use a private runtime directory. Older installed themes
+# keep the same tracker data in /tmp/gwrt-clients.json; accept that format
+# during an in-place theme upgrade so the navigation bar does not lose the
+# real device count until the tracker daemon itself is upgraded.
+runtime_dir=$(/usr/libexec/gwrt-runtime-dir 2>/dev/null || true)
+if [ -n "$runtime_dir" ]; then
+	state=$runtime_dir/clients.json
+fi
+
+valid_state() {
+	[ -n "$1" ] && [ -f "$1" ] && [ ! -L "$1" ] && [ -r "$1" ] \
+		&& jsonfilter -i "$1" -e '@.clients' >/dev/null 2>&1
+}
+
+if ! valid_state "$state"; then
+	state=''
+	for candidate in /tmp/gwrt-clients.json /etc/gwrt/clients.json; do
+		if valid_state "$candidate"; then
+			state=$candidate
+			break
+		fi
+	done
+fi
+
+if [ -n "$state" ]; then
 	cat "$state"
 else
 	printf '%s\n' '{"updated":0,"clients":[]}'

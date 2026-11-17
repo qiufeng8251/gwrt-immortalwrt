@@ -91,10 +91,19 @@
     "/usr/libexec/gwrt-clients-dump": [
      "exec"
     ],
+    "/usr/libexec/gwrt-navbar-status": [
+     "exec"
+    ],
+    "/usr/libexec/gwrt-accelinfo": [
+     "exec"
+    ],
     "/usr/libexec/gwrt-coremark status": [
      "exec"
     ],
     "/usr/sbin/ponctl --device pon0 status --json": [
+     "exec"
+    ],
+    "/usr/libexec/gwrt-traffic-daily read": [
      "exec"
     ]
    },
