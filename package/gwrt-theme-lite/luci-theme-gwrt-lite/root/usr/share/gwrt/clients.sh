@@ -4,7 +4,7 @@
 # 用法:
 #   clients.sh scan        # 扫一次 ARP+assoclist, 更新内存状态 + 必要时 flush JSON
 #   clients.sh daemon      # 后台循环扫描 (init.d 用)
-#   clients.sh cleanup-daily  # 凌晨 0:00 cron 调用, 清离线条目
+#   clients.sh cleanup-daily  # 兼容午夜 cron, 仅保存快照（离线每轮自动回收）
 #   clients.sh dump        # 输出当前 JSON (供前端 ubus 调用 / 调试)
 #
 # 数据存档: /etc/gwrt/clients.json
@@ -26,6 +26,8 @@ RUNTIME=/tmp/gwrt-clients.json
 WWWLINK=/www/gwrt-clients.json   # uhttpd 暴露给前端 fetch
 PERSIST_DIR=/etc/gwrt
 FLUSH_INTERVAL=300   # 5min flush to flash
+OFFLINE_RETENTION=86400 # 24h since last actual observation
+MERGER=/usr/share/gwrt/clients-merge.awk
 SCAN_INTERVAL=30     # 30s scan tick
 
 mkdir -p "$PERSIST_DIR"
@@ -208,19 +210,13 @@ do_scan() {
 	ensure_runtime
 
 	local now=$(date +%s)
-	local active_list active_macs wan_info
+	local active_list wan_info
 	active_list=$(collect_active)
 	wan_info=$(collect_wan_info)
-	active_macs=$(echo "$active_list" | awk -F'|' '{print $1}' | sort -u)
 
-	# 读当前已知 clients
-	local existing_json
-	existing_json=$(cat "$RUNTIME" 2>/dev/null)
-	[ -z "$existing_json" ] && existing_json='{"updated":0,"clients":[]}'
-
-	# 加载 DHCP leases (从 /tmp/dhcp.leases)
+	# DHCP is metadata only; an unexpired lease does not prove presence.
 	local dhcp_data=""
-	[ -r /tmp/dhcp.leases ] && dhcp_data=$(awk '{print tolower($2)"|"$3"|"$4}' /tmp/dhcp.leases)
+	[ -r /tmp/dhcp.leases ] && dhcp_data=$(awk -v now="$now" '$1 == 0 || $1 > now {print tolower($2)"|"$3"|"$4}' /tmp/dhcp.leases)
 
 	# DHCP 指纹 (option 60/55, dnsmasq dhcp-script 写入): mac|os|vendor|options
 	local fp_data=""
@@ -259,105 +255,18 @@ do_scan() {
 			}')
 	fi
 
-	# 用 awk 做合并 (省得调 jsonfilter 上百次)
+	# MAC identity, IP ownership and the 24h offline deadline are resolved
+	# together. The same policy also migrates old caches on the first scan.
 	local merged
-	merged=$(awk -v now="$now" -v existing="$existing_json" -v active="$active_list" -v dhcp="$dhcp_data" -v fp="$fp_combined" -v wan_json="$wan_info" -v port_data="$bridge_port_data" '
-	BEGIN {
-		# 解析 existing JSON (粗暴 regex, 适配我们已知格式)
-		n = split(existing, eline, /\{"mac":"/)
-		for (i = 2; i <= n; i++) {
-			s = eline[i]
-			mac = ""; host = ""; first = 0; last = 0; off_at = 0
-			if (match(s, /^[^"]+/))                 { mac = substr(s, RSTART, RLENGTH) }
-			if (match(s, /"host":"[^"]*"/))         { host = substr(s, RSTART+8, RLENGTH-9) }
-			if (match(s, /"first_seen":[0-9]+/))    { first = substr(s, RSTART+13, RLENGTH-13)+0 }
-			if (match(s, /"last_seen":[0-9]+/))     { last = substr(s, RSTART+12, RLENGTH-12)+0 }
-			if (match(s, /"offline_at":[0-9]+/))    { off_at = substr(s, RSTART+13, RLENGTH-13)+0 }
-			if (mac) {
-				e_first[mac] = first
-				e_last[mac]  = last
-				e_off[mac]   = off_at
-				e_host[mac]  = host
-			}
-		}
-
-		# DHCP leases (ip + hostname 补全)
-		n = split(dhcp, dline, "\n")
-		for (i = 1; i <= n; i++) {
-			split(dline[i], a, "|")
-			if (a[1]) {
-				d_ip[a[1]]   = a[2]
-				d_host[a[1]] = a[3]
-			}
-		}
-
-		# 解析 active
-		n = split(active, aline, "\n")
-		for (i = 1; i <= n; i++) {
-			split(aline[i], a, "|")
-			if (a[1]) {
-				active_mac[a[1]] = 1
-				if (a[2] != "-" && a[2] != "") a_ip[a[1]]  = a[2]
-				a_via[a[1]] = a[3]
-				a_sig[a[1]] = a[4]
-				all_macs[a[1]] = 1
-			}
-		}
-		# 解析桥端口数据 (mac → 物理端口名)
-		n = split(port_data, pdline, "\n")
-		for (i = 1; i <= n; i++) {
-			split(pdline[i], a, "|")
-			if (a[1]) port_of[a[1]] = a[2]
-		}
-		# 解析 DHCP 指纹 (mac → 系统特性)
-		n = split(fp, fline, "\n")
-		for (i = 1; i <= n; i++) {
-			split(fline[i], fa, "|")
-			if (fa[1]) f_os[fa[1]] = fa[2]
-		}
-		# 把 existing 里的 MAC 也加进 all_macs (保留离线设备)
-		for (m in e_first) all_macs[m] = 1
-		for (m in d_ip)    all_macs[m] = 1
-
-		# 输出 JSON
-		printf("{\"updated\":%d,\"wan\":%s,\"clients\":[", now, wan_json)
-		first_entry = 1
-		for (m in all_macs) {
-			online = (m in active_mac) ? 1 : 0
-			ip   = (m in a_ip)   ? a_ip[m]   : (m in d_ip ? d_ip[m] : "")
-			via  = (m in a_via)  ? a_via[m]  : ""
-			sig  = (m in a_sig)  ? a_sig[m]  : ""
-			host = (m in d_host) ? d_host[m] : e_host[m]
-			# 重连时重置 first_seen = now, 显示本次连接时长
-			was_offline = (m in e_off) && e_off[m] > 0
-			if (online && was_offline) {
-				f = now
-			} else {
-				f = (m in e_first && e_first[m] > 0) ? e_first[m] : now
-			}
-			# online 模式: 持续更新 last_seen, 清空 offline_at
-			# offline 模式: 保留 e_last, 首次掉线记录 offline_at
-			if (online) {
-				l = now
-				off = 0
-			} else {
-				l = (m in e_last && e_last[m] > 0) ? e_last[m] : now
-				off = (m in e_off && e_off[m] > 0) ? e_off[m] : now
-			}
-			if (!first_entry) printf(",")
-			first_entry = 0
-			# JSON 转义 host 里的特殊字符 (简化, 通常只有字母数字)
-			gsub(/[\\"]/, "", host)
-			port = (m in port_of) ? port_of[m] : ""
-			printf("{\"mac\":\"%s\",\"ip\":\"%s\",\"host\":\"%s\",\"via\":\"%s\",\"port\":\"%s\",\"online\":%s,\"first_seen\":%d,\"last_seen\":%d,\"offline_at\":%d,\"signal\":\"%s\",\"os\":\"%s\"}",
-				m, ip, host, via, port, (online ? "true" : "false"), f, l, off, sig, f_os[m])
-		}
-		printf("]}\n")
-	}')
+	merged=$(awk -v now="$now" -v retention="$OFFLINE_RETENTION" \
+		-v state_file="$RUNTIME" -v active="$active_list" -v dhcp="$dhcp_data" \
+		-v fp="$fp_combined" -v wan_json="$wan_info" -v port_data="$bridge_port_data" \
+		-f "$MERGER") || return 1
+	[ -n "$merged" ] || return 1
 
 	# 写 RUNTIME
-	echo "$merged" > "$RUNTIME.new"
-	mv "$RUNTIME.new" "$RUNTIME"
+	echo "$merged" > "$RUNTIME.$$"
+	mv "$RUNTIME.$$" "$RUNTIME"
 
 	# 暴露给 uhttpd 让前端 fetch (/gwrt-clients.json)
 	[ -L "$WWWLINK" ] || ln -sf "$RUNTIME" "$WWWLINK" 2>/dev/null
@@ -383,37 +292,11 @@ do_flush() {
 	fi
 }
 
-# === cleanup-daily: 每天 0:00 cron 调用,清离线条目 ===
+# === cleanup-daily: legacy cron entry; scans already expire offline clients ===
 do_cleanup_daily() {
-	ensure_runtime
-	local now=$(date +%s)
-	# 只保留 online=true 的条目, 全部 reset first_seen=now
-	local cleaned
-	cleaned=$(cat "$RUNTIME" | awk -v now="$now" '
-		BEGIN { kept = 0 }
-		{
-			n = split($0, eline, /\{"mac":"/)
-			printf("{\"updated\":%d,\"clients\":[", now)
-			for (i = 2; i <= n; i++) {
-				s = eline[i]
-				if (s ~ /"online":true/) {
-					# 重置 first_seen = now
-					gsub(/"first_seen":[0-9]+/, "\"first_seen\":" now, s)
-					gsub(/}.*/, "}", s)
-					if (kept > 0) printf(",")
-					printf("{\"mac\":\"%s", s)
-					kept++
-				}
-			}
-			printf("]}\n")
-		}')
-	echo "$cleaned" > "$RUNTIME.new"
-	mv "$RUNTIME.new" "$RUNTIME"
-	cp "$RUNTIME" "$PERSIST"
-	echo $(date +%s) > /tmp/gwrt-clients.flushed
-
-	# 顺手清内存缓存
-	sync && echo 3 > /proc/sys/vm/drop_caches 2>/dev/null
+	# Preserve connection start times and WAN metadata. The daemon performs
+	# expiry every scan; cron only persists its latest complete snapshot.
+	do_flush
 }
 
 # === dump: 输出当前 JSON ===

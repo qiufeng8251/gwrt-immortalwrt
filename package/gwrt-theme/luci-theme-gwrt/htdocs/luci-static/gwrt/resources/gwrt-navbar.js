@@ -160,6 +160,39 @@
       setItem('gwrtNavbarHealth', healthText, healthState, '路由综合状态：' + healthText + (isFinite(topCpu) && topCpu >= 80 ? '；存在高 CPU 进程' : ''));
     }
 
+    function trafficBytes(n) {
+      n=Number(n)||0;
+      var units=['B','KB','MB','GB','TB','PB'],i=0;
+      while(n>=1024&&i<units.length-1){n/=1024;i++;}
+      return (i?n.toFixed(n>=100?0:1):Math.round(n))+' '+units[i];
+    }
+    function renderTraffic(data) {
+      if(!data || !data.families || !isFinite(Number(data.total))) return;
+      var el=byId('gwrtWanPeriods');if(!el)return;
+      el.innerHTML='';
+      var periods=Array.isArray(data.periods)?data.periods:[];
+      var entries=[];
+      ['today','week','month','year'].forEach(function(key){
+        var p=periods.find(function(p){return p.key===key;});
+        if(p)entries.push(p);
+      });
+      entries.push({key:'total',label:'总量',total:Number(data.total)});
+      entries.forEach(function(p){
+        var bytes=p.bytes||{},total=p.total;
+        if(total===undefined){total=0;['up4','down4','up6','down6'].forEach(function(k){total+=Number(bytes[k])||0;});}
+        var item=document.createElement('span'),label=document.createElement('span'),value=document.createElement('b');
+        item.className='gwrt-navbar-period';
+        label.className='gwrt-navbar-period-label';
+        label.textContent=p.label;
+        value.textContent=trafficBytes(total);item.appendChild(label);item.appendChild(value);
+        item.title=p.label+'流量（IPv4 + IPv6）'+(p.bytes?'：IPv4 '+trafficBytes((Number(bytes.up4)||0)+(Number(bytes.down4)||0))+'，IPv6 '+trafficBytes((Number(bytes.up6)||0)+(Number(bytes.down6)||0)):'')+'；每半小时保存累计用量';
+        if(!data.ok)item.title+='；当前显示最近记录';
+        el.appendChild(item);
+      });
+    }
+    window.gwrtRenderTrafficPeriods=renderTraffic;
+    try{renderTraffic(JSON.parse(localStorage.getItem('gwrt_wan_traffic_v2')||'null'));}catch(e){}
+
     function poll() {
       if (stopped || busy || document.hidden) return;
       busy = true;
@@ -169,9 +202,13 @@
       var devicesResult = readDevices().then(function (data) {
         return { ok: true, data: data };
       }).catch(function () { return { ok: false }; });
-      Promise.all([statusResult, devicesResult]).then(function (results) {
+      var trafficResult=rpc('file','exec',{command:'/usr/libexec/gwrt-traffic-daily',params:['read']},6000).then(function(data){
+        return parseExec(data);
+      }).catch(function(){return null;});
+      Promise.all([statusResult, devicesResult, trafficResult]).then(function (results) {
         renderStatus(results[0]);
         renderDevices(results[1]);
+        renderTraffic(results[2]);
       }).then(function () {
         busy = false;
         if (!stopped && !document.hidden) timer = window.setTimeout(poll, POLL_MS);

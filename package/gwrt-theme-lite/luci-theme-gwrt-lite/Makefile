@@ -16,11 +16,11 @@
 include $(TOPDIR)/rules.mk
 
 LUCI_TITLE:=GWRT Theme (lite, no per-app icons)
-LUCI_DEPENDS:=+luci-base
+LUCI_DEPENDS:=+luci-base +gwrt-wifi-defaults
 
 PKG_NAME:=luci-theme-gwrt-lite
 PKG_VERSION:=1.0
-PKG_RELEASE:=1
+PKG_RELEASE:=3
 PKG_MAINTAINER:=GWRT
 PKG_LICENSE:=Apache-2.0
 
@@ -40,6 +40,19 @@ define Build/Prepare/luci-theme-gwrt-lite
 	$(INSTALL_DIR) $(PKG_BUILD_DIR)/htdocs/luci-static/resources
 	$(CP) $(PKG_BUILD_DIR)/htdocs/luci-static/gwrt/resources/menu-gwrt.js \
 		$(PKG_BUILD_DIR)/htdocs/luci-static/resources/menu-gwrt.js
+endef
+
+# Repair the status dispatcher immediately after a real package install;
+# never run the target service while building the firmware image.
+define Package/$(PKG_NAME)/postinst
+#!/bin/sh
+[ -n "$${IPKG_INSTROOT}" ] || {
+	chmod 755 /etc/init.d/gwrt-theme 2>/dev/null || true
+	[ -x /etc/init.d/gwrt-theme ] && /etc/init.d/gwrt-theme enable >/dev/null 2>&1 || true
+	[ -x /etc/init.d/gwrt-theme ] && /etc/init.d/gwrt-theme reload >/dev/null 2>&1 || true
+	rm -f /tmp/luci-indexcache /tmp/luci-modulecache/* 2>/dev/null || true
+}
+exit 0
 endef
 
 include $(TOPDIR)/feeds/luci/luci.mk

@@ -22,7 +22,7 @@
 #   airoha-ponctl + airoha-pond，两边都会生效。
 #
 # 【体积预算 ~50MB】
-#   固件内：基础系统 + LuCI + 主题 + tv-adblock + daed(含内核 BTF) + PON + npu/route-tool/easytier 面板 + zram。
+#   固件内：基础系统 + LuCI + 主题 + PON + npu/route-tool/easytier 面板 + zram。
 #   固件外（后期设备自行安装）：gecoosac(15.6MB)、openclash 面板(带 ruby)、
 #   openclash/easytier 本体、docker/podman、kmod-wireguard。
 #   注意：gwrt-theme-V3/manifest/config.fragment 里带 openclash/bandix/
@@ -95,19 +95,6 @@ add_pkg() {
 	echo "  + $sym"
 }
 
-add_mod() {
-	sym=$1
-	grep -q "^CONFIG_PACKAGE_${sym}=m$" "$TOP/.config" && return 0
-	if grep -q "^CONFIG_PACKAGE_${sym}=" "$TOP/.config"; then
-		sed -i "s|^CONFIG_PACKAGE_${sym}=.*|CONFIG_PACKAGE_${sym}=m|" "$TOP/.config"
-	elif grep -q "^# CONFIG_PACKAGE_${sym} is not set$" "$TOP/.config"; then
-		sed -i "s|^# CONFIG_PACKAGE_${sym} is not set$|CONFIG_PACKAGE_${sym}=m|" "$TOP/.config"
-	else
-		echo "CONFIG_PACKAGE_${sym}=m" >>"$TOP/.config"
-	fi
-	echo "  ~ $sym (m)"
-}
-
 unset_pkg() {
 	sym=$1
 	grep -q "^CONFIG_PACKAGE_${sym}=y$" "$TOP/.config" || return 0
@@ -128,32 +115,8 @@ for p in \
 	luci-i18n-pon-zh-cn \
 	luci-app-iptv \
 	luci-i18n-iptv-zh-cn \
-	luci-app-pon-wan ; do
-	add_pkg "$p"
-done
-
-echo "[an7581] WiFi（MT7916D）/ USB3 / 2.5G PHY（CI 机型过滤会漏 DEVICE_PACKAGES）:"
-for p in \
-	kmod-mt76-core \
-	kmod-mt76-connac \
-	kmod-mt7915e \
-	kmod-mt7916-firmware \
-	wpad-openssl \
-	kmod-usb3 \
-	kmod-usb-xhci-hcd \
-	kmod-usb-xhci-mtk \
-	kmod-phy-maxlinear ; do
-	add_pkg "$p"
-done
-
-echo "[an7581] IPTV / rtp2httpd / Windows 激活:"
-for p in \
-	rtp2httpd \
-	luci-app-rtp2httpd \
-	luci-i18n-rtp2httpd-zh-cn \
-	vlmcsd \
-	luci-app-vlmcsd \
-	luci-i18n-vlmcsd-zh-cn ; do
+	luci-app-pon-wan \
+	luci-app-pon-info ; do
 	add_pkg "$p"
 done
 
@@ -214,65 +177,6 @@ for p in \
 	add_pkg "$p"
 done
 
-echo "[an7581] Podman 所需内核模块（=m，podman 用户自行安装）:"
-for m in \
-	kmod-veth \
-	kmod-br-netfilter \
-	kmod-nf-nat \
-	kmod-iptable-nat \
-	kmod-nft-nat \
-	kmod-fuse ; do
-	add_mod "$m"
-done
-
-echo "[an7581] SSR Plus 代理:"
-for p in \
-	gwrt-ssr-plus-luci \
-	xray-core \
-	v2ray-core \
-	hysteria \
-	sing-box \
-	dns2socks \
-	microsocks \
-	ipt2socks \
-	dns2tcp \
-	simple-obfs \
-	tcping \
-	lua-neturl \
-	lyaml \
-	resolveip \
-	bind-dig \
-	nping ; do
-	add_pkg "$p"
-done
-
-echo "[an7581] daed（GWRT runtime1 流量修复，源码构建 arm64）:"
-for p in \
-	daed \
-	daed-geoip \
-	daed-geosite \
-	luci-app-daed \
-	luci-i18n-daed-zh-cn \
-	kmod-sched-bpf \
-	kmod-xdp-sockets-diag ; do
-	add_pkg "$p"
-done
-
-# daed 需要内核 BTF：本树没有 vmlinux-btf 包，generic config 默认
-# CONFIG_DEBUG_INFO_BTF is not set，必须显式打开，否则 gwrt-validate-build-config.py 直接 fail。
-echo "[an7581] daed 依赖：内核 BTF + XDP_SOCKETS:"
-# daed/dae 的内核侧 DEPENDS 是 KERNEL_XDP_SOCKETS（generic config 默认关）。
-# 缺它时 kconfig 会把 daed/luci-app-daed 当成不可见符号，defconfig 静默丢弃
-# 已写入的 CONFIG_PACKAGE_daed=y（261114-03 镜像即因此缺 daed），故一并打开。
-# KERNEL_DEBUG_INFO_BTF 的依赖是 "KERNEL_DEBUG_INFO && !KERNEL_DEBUG_INFO_REDUCED"，
-# 而 airoha 不在 reduced 的 default-n 名单里，默认 KERNEL_DEBUG_INFO_REDUCED=y，
-# 只打开 BTF 会被 kconfig 静默丢弃（261115-01 首跑即报 FAIL: daed needs kernel BTF）。
-grep -q "^# CONFIG_KERNEL_DEBUG_INFO_REDUCED is not set$" "$TOP/.config" || \
-	echo "# CONFIG_KERNEL_DEBUG_INFO_REDUCED is not set" >>"$TOP/.config"
-for sym in CONFIG_KERNEL_DEBUG_INFO_BTF CONFIG_KERNEL_DEBUG_INFO_BTF_MODULES CONFIG_KERNEL_MODULE_ALLOW_BTF_MISMATCH CONFIG_KERNEL_XDP_SOCKETS; do
-	grep -q "^${sym}=y$" "$TOP/.config" || echo "${sym}=y" >>"$TOP/.config"
-done
-
 echo "[an7581] 清除（后期设备自行安装，固件不带）:"
 for p in \
 	openclash \
@@ -284,7 +188,9 @@ for p in \
 	docker \
 	dockerd \
 	docker-compose \
+	podman \
 	kmod-wireguard \
+	kmod-tun \
 	kmod-nft-tproxy \
 	kmod-inet-diag \
 	luci-app-bandix-plus \
@@ -317,15 +223,6 @@ if [ "${WITH_OPENCLASH}" = "1" ]; then
 	done
 fi
 
-# luci-app-airoha-npu 的 Frame Engine / 频率详情读取依赖 busybox devmem 与 debugfs。
-# 只有 CONFIG_BUSYBOX_CUSTOM=y 时才会 source config/Config.in，
-# BUSYBOX_CONFIG_DEVMEM 才有提示并可写入 .config；否则 busybox 只用
-# Config-defaults.in 的隐藏默认值（261110-03/04 拆包均无 devmem）。
-echo "[an7581] NPU 详情页依赖（devmem + debugfs）:"
-for sym in CONFIG_BUSYBOX_CUSTOM CONFIG_BUSYBOX_CONFIG_DEVMEM CONFIG_KERNEL_DEBUG_FS CONFIG_KERNEL_DEVMEM; do
-	grep -q "^${sym}=y$" "$TOP/.config" || echo "${sym}=y" >>"$TOP/.config"
-done
-
 # --- 4. 再次 defconfig 并强制复检 --------------------------------------------
 make defconfig >/dev/null
 
@@ -354,21 +251,6 @@ for p in \
 	unset_pkg "$p"
 done
 make defconfig >/dev/null
-
-# defconfig 会静默丢弃依赖不满足的包（连 "# ... is not set" 都不留），
-# 这里对核心插件做硬复检，缺失即失败，避免再交付缺包的镜像。
-echo "[an7581] 核心插件复检:"
-MISSING=""
-for p in daed daed-geoip daed-geosite luci-app-daed \
-	kmod-sched-bpf kmod-xdp-sockets-diag gwrt-tv-adblock luci-theme-gwrt ; do
-	grep -q "^CONFIG_PACKAGE_${p}=y$" "$TOP/.config" || MISSING="$MISSING $p"
-done
-if [ -n "$MISSING" ]; then
-	echo "ERROR: defconfig 后缺少必需包:$MISSING" >&2
-	exit 1
-fi
-grep -q "^CONFIG_KERNEL_XDP_SOCKETS=y$" "$TOP/.config" || {
-	echo "ERROR: CONFIG_KERNEL_XDP_SOCKETS 未生效（daed 会失效）" >&2; exit 1; }
 
 if [ "$OUT" != ".config" ] && [ "$OUT" != "$TOP/.config" ]; then
 	cp "$TOP/.config" "$OUT"

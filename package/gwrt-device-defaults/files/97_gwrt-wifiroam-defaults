@@ -1,11 +1,8 @@
 #!/bin/sh
-# wifiroam（漫游组网）默认值 + 去掉“打赏”
-#
-# - 角色默认 unconfigured（普通 AP，等主AP 配对；可一键改主AP）
-# - 无线回传 SSID/密码：mesh-gwrt / Abc123abc8888
-# - 用我们打过补丁的 topology.js 覆盖安装包里的版本（去掉“用得爽，打个赏”）
-
+# Install the selected wifiroam overlay, then apply missing defaults once.
+# Saved Mesh roles, credentials, roaming lists and disabled state take priority.
 SRC=/usr/share/gwrt/wifiroam
+V5=/usr/share/gwrt/wifiroam-v5
 VIEW=/www/luci-static/resources/view/wifiroam
 BOARD="$(cat /tmp/sysinfo/board_name 2>/dev/null)"
 
@@ -20,12 +17,13 @@ if [ "$BOARD" = 'jdcloud,re-ss-01' ]; then
 	for f in wifiroamd.uc topology.js clients.js pairing.js settings.js menu.json; do
 		[ -f "$SRC/$f" ] || exit 1
 	done
+	# 95 is the readiness barrier; keep the same check when 97 is retried alone.
 	has_2g=0
 	has_5g=0
 	for iface in $(uci -q show wireless | sed -n 's/^wireless\.\([^.]*\)=wifi-iface$/\1/p'); do
 		[ "$(uci -q get "wireless.$iface.mode")" = ap ] || continue
-		[ -n "$(uci -q get "wireless.$iface.ssid")" ] || continue
 		case "$iface" in wifiroam_bh*) continue ;; esac
+		[ -n "$(uci -q get "wireless.$iface.ssid")" ] || continue
 		radio="$(uci -q get "wireless.$iface.device")"
 		case "$(uci -q get "wireless.$radio.band")" in
 			2g) has_2g=1 ;;
@@ -35,142 +33,160 @@ if [ "$BOARD" = 'jdcloud,re-ss-01' ]; then
 	[ "$has_2g" = 1 ] && [ "$has_5g" = 1 ] || exit 1
 fi
 
-# 0) 打过补丁的守护进程：支持主AP 下发 SSID/密码（同一 ESS 才能无缝漫游）
-if [ -f "$SRC/wifiroamd.uc" ] && [ -d /usr/share/wifiroam ]; then
-	cmp -s "$SRC/wifiroamd.uc" /usr/share/wifiroam/wifiroamd.uc || \
-		cp -f "$SRC/wifiroamd.uc" /usr/share/wifiroam/wifiroamd.uc || exit 1
-fi
+# A failed preset install remains pending. Installing it on the next boot
+# would overwrite this overlay, so keep this step pending on every board too.
+[ ! -f /etc/uci-defaults/96_gwrt-preset-apk ] || exit 1
 
-# 1) 打赏按钮/弹窗 + 中文标题（补丁版页面）
-if [ -d "$SRC" ]; then
-	for f in topology.js clients.js pairing.js settings.js; do
-		[ -f "$SRC/$f" ] && [ -d "$VIEW" ] || continue
-		cmp -s "$SRC/$f" "$VIEW/$f" || cp -f "$SRC/$f" "$VIEW/$f" || exit 1
+copy_changed() {
+	[ -f "$1" ] || return 0
+	cmp -s "$1" "$2" && return 0
+	mkdir -p "${2%/*}" && cp -f "$1" "$2" || return 1
+}
+
+# Select the final overlay before copying; never install the old daemon only
+# to replace and restart it again with v5 during the same first boot.
+DAEMON="$SRC/wifiroamd.uc"
+[ ! -f "$V5/wifiroamd.uc" ] || DAEMON="$V5/wifiroamd.uc"
+if [ -d /usr/share/wifiroam ]; then
+	copy_changed "$DAEMON" /usr/share/wifiroam/wifiroamd.uc || exit 1
+fi
+if [ -d "$VIEW" ]; then
+	for f in topology.js clients.js pairing.js settings.js advanced.js; do
+		file="$SRC/$f"
+		[ ! -f "$V5/views/$f" ] || file="$V5/views/$f"
+		copy_changed "$file" "$VIEW/$f" || exit 1
 	done
-	# 菜单标题：无线漫游 / 网络拓扑 / 客户端 / 漫游设置 / Mesh 配对
-	if [ -f "$SRC/menu.json" ] && [ -f /usr/share/luci/menu.d/luci-app-wifiroam.json ]; then
-		cmp -s "$SRC/menu.json" /usr/share/luci/menu.d/luci-app-wifiroam.json || \
-			cp -f "$SRC/menu.json" /usr/share/luci/menu.d/luci-app-wifiroam.json || exit 1
-	fi
-	rm -f /tmp/luci-indexcache
 fi
-
-# 1b) wifiroam v5 覆盖层（gwrt-wifiroam-v5 包）：整套换上，老的预置 apk 保持不动
-#     守护进程、四个页面、资源、菜单、ACL、中文翻译都从私有目录拷进来
-V5=/usr/share/gwrt/wifiroam-v5
-if [ -f "$V5/wifiroamd.uc" ] && [ -d /usr/share/wifiroam ]; then
-	cmp -s "$V5/wifiroamd.uc" /usr/share/wifiroam/wifiroamd.uc || \
-		cp -f "$V5/wifiroamd.uc" /usr/share/wifiroam/wifiroamd.uc || exit 1
-	if [ -d "$V5/res" ] && [ -d /www/luci-static/resources/wifiroam ]; then
-		cp -rf "$V5/res/." /www/luci-static/resources/wifiroam/ || exit 1
+menu="$SRC/menu.json"
+[ ! -f "$V5/menu.json" ] || menu="$V5/menu.json"
+copy_changed "$menu" /usr/share/luci/menu.d/luci-app-wifiroam.json || exit 1
+if [ -f "$V5/wifiroamd.uc" ]; then
+	if [ -d "$V5/res" ]; then
+		mkdir -p /www/luci-static/resources/wifiroam && \
+			cp -rf "$V5/res/." /www/luci-static/resources/wifiroam/ || exit 1
 	fi
-	for f in topology.js clients.js settings.js advanced.js; do
-		[ -f "$V5/views/$f" ] && [ -d "$VIEW" ] || continue
-		cmp -s "$V5/views/$f" "$VIEW/$f" || cp -f "$V5/views/$f" "$VIEW/$f" || exit 1
-	done
-	[ -f "$V5/menu.json" ] && \
-		cp -f "$V5/menu.json" /usr/share/luci/menu.d/luci-app-wifiroam.json
-	[ -f "$V5/acl.json" ] && \
-		cp -f "$V5/acl.json" /usr/share/rpcd/acl.d/luci-app-wifiroam.json
-	[ -f "$V5/wifiroam.zh-cn.lmo" ] && \
-		cp -f "$V5/wifiroam.zh-cn.lmo" /usr/lib/lua/luci/i18n/wifiroam.zh-cn.lmo
-	/etc/init.d/rpcd reload >/dev/null 2>&1
-	rm -f /tmp/luci-indexcache
-	if [ -x /etc/init.d/wifiroam ]; then
-		/etc/init.d/wifiroam restart >/dev/null 2>&1 || exit 1
-	fi
+	copy_changed "$V5/acl.json" /usr/share/rpcd/acl.d/luci-app-wifiroam.json || exit 1
+	copy_changed "$V5/wifiroam.zh-cn.lmo" /usr/lib/lua/luci/i18n/wifiroam.zh-cn.lmo || exit 1
 fi
+rm -f /tmp/luci-indexcache
 
-# 2) UCI 默认值
+set_missing() {
+	uci -q get "$1" >/dev/null 2>&1 && return 0
+	uci -q set "$1=$2"
+}
+
 if [ -f /etc/config/wifiroam ]; then
-	uci -q set wifiroam.core.enabled='1' || exit 1
-	# 默认「AP / 未配置」：上电就是普通 AP，插网线或靠近主AP 都能被
-	# 主AP 发现并一键配对（配对后自动变成子AP）。
-	# 要当主路由：无线漫游 → Mesh 配对 → 设为主AP，
-	#   或 ubus call wifiroam set_role '{"role":"cap"}'
-	uci -q set wifiroam.core.role='unconfigured' || exit 1
-	uci -q set wifiroam.backhaul.enabled='1' || exit 1
-	uci -q set wifiroam.backhaul.ssid='mesh-gwrt' || exit 1
-	uci -q set wifiroam.backhaul.key='Abc123abc8888' || exit 1
+	# The bundled APK defaults backhaul to disabled with a different SSID.
+	# Recognize only its byte-for-byte untouched config; do not infer factory
+	# state from a saved role, an empty password, or an enabled/disabled flag.
+	pristine=0
+	cmp -s /etc/config/wifiroam "$SRC/default-config" && pristine=1
+	if [ "$pristine" = 1 ]; then
+		uci -q set wifiroam.backhaul.enabled=1 && \
+			uci -q set wifiroam.backhaul.ssid=mesh-gwrt && \
+			uci -q set wifiroam.backhaul.key=Abc123abc8888 || exit 1
+	fi
+	# Existing configured devices must not be reset to unconfigured on upgrade.
+	set_missing wifiroam.core.enabled 1 || exit 1
+	set_missing wifiroam.core.role unconfigured || exit 1
+	set_missing wifiroam.backhaul.enabled 1 || exit 1
+	set_missing wifiroam.backhaul.ssid mesh-gwrt || exit 1
+	set_missing wifiroam.backhaul.key Abc123abc8888 || exit 1
 
-	# 回传统一 3-addr（wds=0）：4-addr 在 JDCloud 主AP 上四步握手不稳
+	# Retain the established 3-addr compatibility migration for GWRT-created
+	# backhaul sections only. Custom STA sections and credentials stay intact.
 	wireless_changed=0
 	for sec in wifiroam_bh wifiroam_bh2; do
-		if [ "$(uci -q get wireless.$sec.wds)" = "1" ]; then
-			uci -q set wireless.$sec.wds='0' || exit 1
+		if [ "$(uci -q get wireless.$sec.wds)" = 1 ]; then
+			uci -q set "wireless.$sec.wds=0" || exit 1
 			wireless_changed=1
 		fi
 	done
 	[ "$wireless_changed" = 0 ] || uci -q commit wireless || exit 1
 
-	# 设备名唯一化：同一批机器 hostname 都是 GWRT，拓扑/配对列表里分不清。
-	# 用 br-lan MAC 后 4 位做后缀（例：GWRT-73E2），多台同型号一眼可分。
+	# Naming only fills an empty Mesh name; never change a user hostname.
 	if [ -z "$(uci -q get wifiroam.core.name)" ]; then
-		# 注意：本脚本跑在 uci-defaults（S10boot）阶段，此时 network 还没起，
-		# br-lan/wan 都不存在 —— 必须用内核 probe 阶段就有的 eth0，再依次兜底。
 		mnl=""
-		for _d in eth0 wan lan1 br-lan lo; do
-			_m="$(cat /sys/class/net/$_d/address 2>/dev/null | tr -d ':' | tr 'a-z' 'A-Z')"
-			[ ${#_m} -eq 12 ] && { mnl="$_m"; break; }
+		for dev in eth0 wan lan1 br-lan; do
+			mac="$(cat "/sys/class/net/$dev/address" 2>/dev/null | tr -d ':' | tr 'a-f' 'A-F')"
+			case "$mac" in ''|000000000000|FFFFFFFFFFFF|*[!0-9A-F]*) continue ;; esac
+			[ "${#mac}" = 12 ] && { mnl="$mac"; break; }
 		done
-		sfx="$(printf '%s' "$mnl" | tail -c 4)"
-		if [ -n "$sfx" ]; then
-			uci -q set wifiroam.core.name="GWRT-$sfx" || exit 1
-			# 主机名还是默认 GWRT 时也带上后缀，LuCI/DHCP 列表里同样能区分
-			if [ "$(uci -q get system.@system[0].hostname)" = "GWRT" ]; then
-				uci -q set system.@system[0].hostname="GWRT-$sfx" || exit 1
-				uci -q commit system || exit 1
+		if [ -n "$mnl" ]; then
+			sfx="$(printf '%s' "$mnl" | tail -c 4)"
+			uci -q set "wifiroam.core.name=GWRT-$sfx" || exit 1
+			if [ "$(uci -q get system.@system[0].hostname)" = GWRT ]; then
+				uci -q set "system.@system[0].hostname=GWRT-$sfx" && uci -q commit system || exit 1
 			fi
 		fi
 	fi
-	# 漫游组：把本机 AP 的 SSID 预选进去（同 SSID + 同密码才能无缝漫游）
-	# 回传 SSID（mesh-gwrt）是隐藏 WDS AP，绝不能进漫游组
-	bh_ssid="$(uci -q get wifiroam.backhaul.ssid)"
-	# Keep each SSID as one UCI list item, including names with spaces.
-	uci -q get wifiroam.roam.ssids >/dev/null 2>&1 && \
-		{ uci -q delete wifiroam.roam.ssids || exit 1; }
-	set --
-	has_ssids=0
-	for i in $(uci -q show wireless | sed -n 's/^wireless\.\([^.]*\)=wifi-iface$/\1/p'); do
-		[ "$(uci -q get "wireless.$i.mode")" = ap ] || continue
-		case "$i" in wifiroam_bh*) continue ;; esac
-		s="$(uci -q get "wireless.$i.ssid")"
-		[ -n "$s" ] || continue
-		[ "$s" = "$bh_ssid" ] && continue
-		duplicate=0
-		for selected in "$@"; do
-			[ "$selected" = "$s" ] && { duplicate=1; break; }
-		done
-		[ "$duplicate" = 0 ] || continue
-		set -- "$@" "$s"
-		uci -q add_list wifiroam.roam.ssids="$s" || exit 1
-		has_ssids=1
-	done
-	if [ "$has_ssids" = 1 ]; then
-		uci -q set wifiroam.roam.enabled='1' || exit 1
-	fi
 
+	# Seed a new roaming group only. Keep a saved list (including empty lists)
+	# and existing cap/sap configuration intact when upgrading or retrying.
+	role="$(uci -q get wifiroam.core.role)"
+	if [ "$role" = unconfigured ] && ! uci -q get wifiroam.roam.ssids >/dev/null 2>&1; then
+		bh_ssid="$(uci -q get wifiroam.backhaul.ssid)"
+		set --
+		for iface in $(uci -q show wireless | sed -n 's/^wireless\.\([^.]*\)=wifi-iface$/\1/p'); do
+			[ "$(uci -q get "wireless.$iface.mode")" = ap ] || continue
+			case "$iface" in wifiroam_bh*) continue ;; esac
+			ssid="$(uci -q get "wireless.$iface.ssid")"
+			[ -n "$ssid" ] && [ "$ssid" != "$bh_ssid" ] || continue
+			duplicate=0
+			for selected in "$@"; do
+				[ "$selected" = "$ssid" ] && { duplicate=1; break; }
+			done
+			[ "$duplicate" = 0 ] || continue
+			set -- "$@" "$ssid"
+		done
+		# Write the group flag before the list: a failed flag write must not leave
+		# a staged list that looks like an already-completed group on retry.
+		if [ "$#" != 0 ]; then
+			if [ "$pristine" = 1 ]; then
+				uci -q set wifiroam.roam.enabled=1 || exit 1
+			else
+				set_missing wifiroam.roam.enabled 1 || exit 1
+			fi
+		fi
+		# A failed list write is reverted so the next invocation retries it all.
+		for ssid in "$@"; do
+			uci -q add_list "wifiroam.roam.ssids=$ssid" || {
+				uci -q revert wifiroam.roam.ssids
+				exit 1
+			}
+		done
+	fi
 	uci -q commit wifiroam || exit 1
 
+	# S10boot precedes normal service startup. Only restart an active daemon;
+	# SS-01's deferred worker must also start a not-yet-running enabled daemon.
 	if [ -x /etc/init.d/wifiroam ]; then
-		if [ "$BOARD" = 'jdcloud,re-ss-01' ]; then
-			/etc/init.d/wifiroam enable >/dev/null 2>&1 || exit 1
+		if [ "$(uci -q get wifiroam.core.enabled)" = 1 ]; then
+			if [ "$BOARD" = 'jdcloud,re-ss-01' ]; then
+				/etc/init.d/wifiroam enable >/dev/null 2>&1 || exit 1
+			fi
+			if /etc/init.d/wifiroam running >/dev/null 2>&1; then
+				/etc/init.d/wifiroam restart >/dev/null 2>&1 || exit 1
+			elif [ "$BOARD" = 'jdcloud,re-ss-01' ]; then
+				/etc/init.d/wifiroam start >/dev/null 2>&1 || exit 1
+			fi
 		fi
-		/etc/init.d/wifiroam restart >/dev/null 2>&1 || {
-			[ "$BOARD" != 'jdcloud,re-ss-01' ] || exit 1
-		}
 	fi
 fi
 
-# 自动配对服务（主 AP 发现未配置 AP 自动配对）
-[ -x /etc/init.d/gwrt-wifiroam-autopair ] && {
-	/etc/init.d/gwrt-wifiroam-autopair enable >/dev/null 2>&1 || {
-		[ "$BOARD" != 'jdcloud,re-ss-01' ] || exit 1
-	}
-	# On SS-01 these defaults run after rcS, so enabling alone misses this boot.
-	if [ "$BOARD" = 'jdcloud,re-ss-01' ]; then
+# ACL changes need a reload only if rpcd is already running.
+if [ -f "$V5/acl.json" ] && [ -x /etc/init.d/rpcd ] && \
+   /etc/init.d/rpcd running >/dev/null 2>&1; then
+	/etc/init.d/rpcd reload >/dev/null 2>&1 || exit 1
+fi
+
+if [ -x /etc/init.d/gwrt-wifiroam-autopair ] && \
+   [ "$(uci -q get wifiroam.core.enabled)" = 1 ]; then
+	/etc/init.d/gwrt-wifiroam-autopair enable >/dev/null 2>&1 || exit 1
+	if [ "$BOARD" = 'jdcloud,re-ss-01' ] && \
+	   [ "$(uci -q get wifiroam.core.enabled)" = 1 ] && \
+	   ! /etc/init.d/gwrt-wifiroam-autopair running >/dev/null 2>&1; then
 		/etc/init.d/gwrt-wifiroam-autopair start >/dev/null 2>&1 || exit 1
 	fi
-}
-
+fi
 exit 0

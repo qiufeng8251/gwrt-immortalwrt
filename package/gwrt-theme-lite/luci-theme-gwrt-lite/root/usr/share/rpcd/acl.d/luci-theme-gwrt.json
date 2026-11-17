@@ -21,6 +21,9 @@
     "/usr/libexec/gwrt-lan-alias": [
      "exec"
     ],
+    "/usr/libexec/gwrt-conntrack": [
+     "exec"
+    ],
     "/bin/cat": [
      "exec"
     ],

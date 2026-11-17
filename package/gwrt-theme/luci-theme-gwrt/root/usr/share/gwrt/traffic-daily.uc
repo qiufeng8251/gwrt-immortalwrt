@@ -1,5 +1,5 @@
 import * as fs from 'fs';
-import { select_sample, new_state, update_state, checkpoint_due, public_state, day_key } from 'gwrt.traffic';
+import { select_sample, new_state, update_state, checkpoint_due, public_state, restore_state, persistent_state } from 'gwrt.traffic';
 
 const runtime = '/tmp/gwrt-theme';
 const memory_file = runtime + '/traffic-state.json';
@@ -11,8 +11,7 @@ function read_json(path) {
 	try { return json(fs.readfile(path)); } catch (e) { return null; }
 }
 function load_state() {
-	let state = read_json(memory_file) || read_json(permanent_file);
-	return state?.version == 1 && type(state.totals) == 'object' && type(state.days) == 'object' && type(state.history) == 'array' ? state : new_state();
+	return restore_state(read_json(memory_file), time()) || restore_state(read_json(permanent_file), time()) || new_state();
 }
 function atomic_write(path, value) {
 	let tmp = path + '.new', text = sprintf('%J\n', value);
@@ -22,16 +21,19 @@ function atomic_write(path, value) {
 	}
 	return true;
 }
-function checkpoint(state, now) {
+function checkpoint(state, now, uptime, boot) {
 	if (!state.first) return false;
 	let st = fs.lstat(permanent_dir);
 	if (!st) { fs.mkdir(permanent_dir, 0700); st = fs.lstat(permanent_dir); }
 	if (st?.type != 'directory' || st.uid != 0) return false;
-	let old_day = state.persisted_day, old_at = state.persisted_at;
-	state.persisted_day = day_key(now); state.persisted_at = now;
-	if (atomic_write(permanent_file, state)) return true;
-	state.persisted_day = old_day; state.persisted_at = old_at;
-	return false;
+	let saved = persistent_state(state, now, uptime, boot);
+	if (!atomic_write(permanent_file, saved)) return false;
+	state.persisted_at = saved.persisted_at;
+	state.persisted_boot = saved.persisted_boot;
+	state.persisted_uptime = saved.persisted_uptime;
+	let sync = fs.popen('/bin/sync', 'r');
+	if (sync) sync.close();
+	return true;
 }
 function read_command(command) {
 	let pipe = fs.popen(command, 'r');
@@ -74,11 +76,13 @@ signal('INT', function() { stopping = true; });
 while (!stopping) {
 	let sample = probe(), now = time();
 	update_state(state, sample, now);
-	if (checkpoint_due(state, now)) checkpoint(state, now);
+	// Checkpoint timing follows the router, even when the traffic probe fails.
+	let uptime = +split(fs.readfile('/proc/uptime') || '0', ' ')[0];
+	let boot = trim(fs.readfile('/proc/sys/kernel/random/boot_id') || '');
+	if (checkpoint_due(state, now, uptime, boot)) checkpoint(state, now, uptime, boot);
 	atomic_write(memory_file, state);
 	if (!stopping) sleep(5000);
 }
-// An orderly service stop also keeps its final increment. Unexpected power
-// loss is deliberately bounded by the once-daily flash checkpoint policy.
-checkpoint(state, time());
+// Preserve final runtime state on a service restart without bypassing the
+// half-hour flash interval. Power loss can discard the last 30 minutes.
 atomic_write(memory_file, state);

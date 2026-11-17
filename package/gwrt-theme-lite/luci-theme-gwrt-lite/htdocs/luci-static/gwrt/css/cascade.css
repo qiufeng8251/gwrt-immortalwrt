@@ -412,3 +412,308 @@ body::before{content:"";position:fixed;inset:0;z-index:20000;pointer-events:none
 .gwrt-mesh-node-icon{line-height:0;color:var(--accent-warning)}
 .gwrt-mesh-node-name{font-size:.6rem;font-weight:600;max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .gwrt-mesh-node-sub{font-size:.5rem;color:var(--text-tertiary)}
+
+/* ── v10: 概览卡片统一视觉 + 接入设备信号/上下行 ── */
+
+/* 概览 8 卡：每个模块一种识别色，顶部强调条 + 标题色点，弱化“八宫格”的呆板感 */
+.dashboard-grid{gap:14px}
+.stat-card{--card-accent:var(--accent-primary);padding:16px 18px 15px;border-radius:16px;gap:7px;
+  background-image:radial-gradient(120% 92% at 100% 0%,color-mix(in srgb,var(--card-accent) 9%,transparent),transparent 58%),var(--gradient-card)}
+.stat-card::before{background:linear-gradient(90deg,var(--card-accent),color-mix(in srgb,var(--card-accent) 24%,transparent) 74%,transparent);opacity:.85;height:3px}
+.stat-card:hover::before{opacity:1}
+.stat-card[data-gwrt="sysinfo"]{--card-accent:var(--accent-primary)}
+.stat-card[data-gwrt="cpu_temp"]{--card-accent:var(--accent-warning)}
+.stat-card[data-gwrt="memstore"]{--card-accent:var(--accent-secondary)}
+.stat-card[data-gwrt="active_apps"]{--card-accent:var(--accent-cyan)}
+.stat-card[data-gwrt="devices"]{--card-accent:var(--accent-purple)}
+.stat-card[data-gwrt="connections"]{--card-accent:#3b82f6}
+.stat-card[data-gwrt="netspeed"]{--card-accent:#ec4899}
+.stat-card[data-gwrt="logerrors"]{--card-accent:var(--accent-danger)}
+.stat-card-label{display:flex;align-items:center;gap:8px;font-size:11px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--text-secondary)}
+.stat-card-label::before{content:'';flex:0 0 auto;width:8px;height:8px;border-radius:3px;background:var(--card-accent);box-shadow:0 0 9px color-mix(in srgb,var(--card-accent) 60%,transparent)}
+.stat-card-value{font-size:1.95rem;font-weight:700;line-height:1.05;letter-spacing:-.02em}
+.stat-card-sub{font-size:.68rem;letter-spacing:.14em;text-transform:uppercase;color:var(--text-tertiary);margin-bottom:2px}
+.stat-card hr{border-top-color:color-mix(in srgb,var(--border-primary) 78%,transparent)}
+.stat-card .mini-bar{height:7px}
+
+/* 接入设备：信号强度格 */
+.gwrt-sig{display:inline-flex;align-items:center;gap:6px}
+.gwrt-sig-bars{display:inline-flex;align-items:flex-end;gap:2px;height:13px}
+.gwrt-sig-bars i{display:block;width:3px;border-radius:1px;background:var(--border-secondary)}
+.gwrt-sig-bars i:nth-child(1){height:28%}
+.gwrt-sig-bars i:nth-child(2){height:50%}
+.gwrt-sig-bars i:nth-child(3){height:74%}
+.gwrt-sig-bars i:nth-child(4){height:100%}
+.gwrt-sig-bars.lv4 i.on{background:#22c55e}
+.gwrt-sig-bars.lv3 i.on{background:#84cc16}
+.gwrt-sig-bars.lv2 i.on{background:var(--accent-warning)}
+.gwrt-sig-bars.lv1 i.on{background:var(--accent-danger)}
+.gwrt-sig-dbm{font-family:var(--font-mono);font-size:.72rem;color:var(--text-secondary);white-space:nowrap}
+.gwrt-sig-bars.lv1+.gwrt-sig-dbm{color:var(--accent-danger)}
+.gwrt-sig-link{display:block;margin-top:2px;font-family:var(--font-mono);font-size:.62rem;color:var(--text-tertiary);white-space:nowrap;letter-spacing:.02em}
+.gwrt-sig-link .down{color:var(--accent-secondary)}
+.gwrt-sig-link .up{color:var(--accent-warning)}
+.gwrt-sig-link .down+.up{margin-left:6px}
+.gwrt-sig-wired{color:var(--text-tertiary)}
+.gwrt-sig-none{color:var(--text-tertiary);font-family:var(--font-mono)}
+
+/* 接入设备：上下行速率/累计 */
+.gwrt-rate-split,.gwrt-total-split{display:inline-flex;flex-direction:column;gap:2px;line-height:1.1;font-family:var(--font-mono);font-size:.76rem}
+.gwrt-rate-split span,.gwrt-total-split span{white-space:nowrap}
+.gwrt-rate-split .down,.gwrt-total-split .down{color:var(--accent-secondary)}
+.gwrt-rate-split .up,.gwrt-total-split .up{color:var(--accent-warning)}
+.gwrt-rate-split.is-combined,.gwrt-total-split.is-combined{color:var(--text-secondary)}
+
+/* 接入设备表格：斑马纹 + 悬停高亮，细线更干净 */
+.gwrt-dhcp-table{border-collapse:collapse}
+.gwrt-dhcp-table tbody tr{transition:background .12s}
+.gwrt-dhcp-table tbody tr:nth-child(even){background:color-mix(in srgb,var(--bg-secondary) 55%,transparent)}
+.gwrt-dhcp-table tbody tr:hover{background:color-mix(in srgb,var(--accent-primary) 8%,transparent)}
+.gwrt-dhcp-table thead th{position:sticky;top:0;z-index:1;background:var(--bg-secondary)}
+
+@media(max-width:520px){
+  .stat-card-value{font-size:1.7rem}
+  .stat-card{padding:14px}
+}
+
+/* 概览 bento 布局：上排 4 个紧凑卡，中排 3 个宽卡，日志卡占满整行，弱化“八等分”的呆板 */
+@media(min-width:1001px){
+  .dashboard-grid{grid-template-columns:repeat(12,minmax(0,1fr));grid-auto-rows:minmax(0,auto);gap:14px}
+  .stat-card{grid-column:span 3}
+  .stat-card[data-gwrt="devices"]{grid-column:span 6}
+  .stat-card[data-gwrt="netspeed"]{grid-column:span 6}
+}
+.stat-card[data-gwrt="logerrors"] .gwrt-log-summary{max-width:440px}
+
+/* ── v11: 设备图标角标 + 设备/连接合并卡 + 网速趋势 hover ── */
+.top-dev-icon{position:relative;overflow:visible}
+.top-dev-icon .top-dev-count{position:absolute;top:-4px;right:-4px;min-width:14px;height:14px;padding:0 3px;border-radius:7px;background:var(--accent-primary);color:#fff;font-size:9px;font-weight:800;line-height:14px;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,.4);pointer-events:none}
+.top-dev-icon.lan .top-dev-count{background:var(--accent-cyan)}
+.top-dev-icon.wifi .top-dev-count{background:var(--accent-purple)}
+
+/* 设备/连接合并卡 */
+.gwrt-devcon{display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:stretch}
+.gwrt-devcon-left,.gwrt-devcon-right{display:flex;flex-direction:column;gap:4px;min-width:0}
+.gwrt-devcon-left .stat-card-value,.gwrt-devcon-right .stat-card-value{font-size:1.5rem}
+.gwrt-devcon-sub{font-size:.62rem;letter-spacing:.12em;text-transform:uppercase;color:var(--text-tertiary);margin-bottom:2px}
+.gwrt-devcon-icons{margin-top:2px;max-height:52px}
+.gwrt-devcon-tcpudp{display:flex;align-items:center;gap:6px;font-size:.78rem;line-height:1.6}
+.gwrt-devcon-lbl{color:var(--text-tertiary);font-weight:700;letter-spacing:.06em}
+.gwrt-devcon-num{font-family:var(--font-mono);font-weight:800;color:var(--text-primary)}
+.gwrt-devcon-sep{color:var(--text-tertiary)}
+.gwrt-devcon-wave{flex:1;min-height:40px;margin-top:2px;border-radius:8px;background:var(--bg-tertiary);overflow:hidden;position:relative}
+
+/* 网速卡：IP 右上 + 趋势 */
+.gwrt-netspeed-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+.gwrt-netspeed-ip{flex:0 0 auto;min-width:0;font-size:.66rem;line-height:1.5;padding:2px 0}
+.gwrt-netspeed-ip .gwrt-wan-address-row{white-space:nowrap}
+.gwrt-wan-trend{min-height:46px;margin:6px 0 2px;border-radius:8px;background:var(--bg-tertiary);overflow:hidden;position:relative}
+.gwrt-wan-trend-svg{width:100%;height:46px;display:block}
+.gwrt-wan-trend-tip{position:absolute;bottom:4px;left:4px;padding:2px 6px;border-radius:4px;background:var(--bg-card);border:1px solid var(--border-primary);font-size:.62rem;font-family:var(--font-mono);color:var(--text-primary);opacity:0;transition:opacity .15s;pointer-events:none;white-space:nowrap}
+.gwrt-wan-trend-empty{display:flex;align-items:center;justify-content:center;height:46px;font-size:.62rem;color:var(--text-tertiary)}
+
+/* 接入设备：接入列/信号列新样式 */
+.gwrt-via-lan{color:var(--accent-cyan);font-family:var(--font-mono);font-size:.72rem;font-weight:700}
+.gwrt-wifi-band{display:inline-block;padding:1px 6px;border-radius:4px;background:color-mix(in srgb,var(--accent-purple) 18%,transparent);color:var(--accent-purple);font-size:.68rem;font-weight:700;letter-spacing:.04em}
+.gwrt-wifi-port{display:block;margin-top:2px;font-family:var(--font-mono);font-size:.6rem;color:var(--text-tertiary)}
+.gwrt-wifi-sig{display:block;margin-top:2px;font-family:var(--font-mono);font-size:.62rem}
+.gwrt-wifi-sig.gwrt-sig-good{color:var(--accent-secondary)}
+.gwrt-wifi-sig.gwrt-sig-mid{color:#84cc16}
+.gwrt-wifi-sig.gwrt-sig-weak{color:var(--accent-warning)}
+.gwrt-wifi-sig.gwrt-sig-bad{color:var(--accent-danger)}
+.gwrt-wifi-sig.gwrt-sig-none{color:var(--text-tertiary)}
+.gwrt-wifi-link{display:block;margin-top:2px;font-family:var(--font-mono);font-size:.6rem;color:var(--text-tertiary)}
+.gwrt-wifi-link .down{color:var(--accent-secondary)}
+.gwrt-wifi-link .up{color:var(--accent-warning)}
+.gwrt-wifi-link .down+.up{margin-left:6px}
+
+@media(max-width:640px){
+  .gwrt-devcon{grid-template-columns:1fr}
+}
+
+
+/* v12: 设备/连接分左右，网速加长 */
+.gwrt-devcon-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+.gwrt-devcon-head-col{display:flex;flex-direction:column;gap:2px;min-width:0}
+.gwrt-devcon-head-right{text-align:right}
+.gwrt-devcon-head-lbl{font-size:11px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--text-secondary)}
+.gwrt-devcon-head-val{font-size:1.8rem;font-weight:700;line-height:1.02;letter-spacing:-.02em;color:var(--text-primary)}
+.gwrt-devcon-body{display:flex;align-items:flex-end;justify-content:space-between;gap:10px;margin-top:6px}
+.gwrt-devcon-mini{font-size:.64rem;color:var(--text-tertiary);white-space:nowrap}
+.gwrt-devcon-mini b{color:var(--text-secondary);font-weight:700}
+.gwrt-devcon-mini-sep{margin:0 4px;color:var(--text-tertiary)}
+.gwrt-devcon-icons{margin-top:4px;max-height:48px}
+.gwrt-devcon-tcpudp{display:flex;align-items:baseline;gap:6px;font-family:var(--font-mono)}
+.gwrt-devcon-tcpudp .gwrt-devcon-lbl{font-size:.62rem;color:var(--text-tertiary);letter-spacing:.08em}
+.gwrt-devcon-tcpudp .gwrt-devcon-num{font-size:.9rem;font-weight:800;color:var(--text-primary)}
+.gwrt-devcon-tcpudp .gwrt-devcon-sep{color:var(--text-tertiary)}
+/* 接入设备更紧凑 */
+.gwrt-wifi-cell{display:flex;flex-direction:column;gap:2px;align-items:flex-start}
+.gwrt-wifi-band{padding:1px 6px;border-radius:4px;background:color-mix(in srgb,var(--accent-purple) 16%,transparent);color:var(--accent-purple);font-size:.64rem;font-weight:700;letter-spacing:.04em}
+.gwrt-wifi-sig{font-family:var(--font-mono);font-size:.64rem}
+/* 网速趋势更大 */
+.gwrt-wan-trend{min-height:58px;height:58px}
+.gwrt-wan-trend-svg{height:58px}
+
+/* v12 hover history */
+.gwrt-wan-trend{position:relative}
+.gwrt-wan-trend-popup{position:absolute;left:0;bottom:calc(100% + 6px);min-width:190px;max-height:180px;overflow:auto;background:var(--bg-card);border:1px solid var(--border-primary);border-radius:10px;box-shadow:0 12px 40px rgba(0,0,0,.4);display:none;z-index:20}
+.gwrt-wan-trend:hover .gwrt-wan-trend-popup{display:block}
+.gwrt-wan-trend-popup-head{padding:6px 10px;font-size:11px;color:var(--text-tertiary);border-bottom:1px solid var(--border-primary)}
+.gwrt-wan-trend-popup-list{display:flex;flex-direction:column}
+.gwrt-wan-trend-hist-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:4px 10px;font-size:11px;font-family:var(--font-mono);border-bottom:1px solid color-mix(in srgb,var(--border-primary) 60%,transparent)}
+.gwrt-wan-trend-hist-row:last-child{border-bottom:none}
+.gwrt-wan-trend-hist-row span:first-child{color:var(--text-tertiary)}
+.gwrt-wan-trend-hist-down{color:var(--accent-secondary)}
+
+/* v13 netspeed big curve */
+.gwrt-netspeed-rate-row{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;margin-top:4px}
+.gwrt-netspeed-rate{display:flex;align-items:center;gap:10px}
+.gwrt-netspeed-rate-item{display:flex;align-items:baseline;gap:6px}
+.gwrt-netspeed-lbl{color:var(--text-tertiary);font-weight:700}
+.gwrt-netspeed-rate-item strong{font-family:var(--font-mono);font-size:1rem}
+.gwrt-netspeed-rate-sep{width:1px;height:16px;background:var(--border-primary)}
+.gwrt-netspeed-total{font-size:1.6rem;line-height:1}
+.gwrt-wan-trend-big{min-height:110px;height:110px;margin-top:10px}
+.gwrt-wan-trend-big .gwrt-wan-trend-svg{height:110px}
+
+
+/* 设备与连接数等分，图标使用卡片余下空间，WAN 地址同行。 */
+.gwrt-devpair{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:0;align-items:start}
+.gwrt-devpair-col{display:flex;flex-direction:column;gap:10px;min-width:0}
+.gwrt-devpair-left{padding-right:16px}
+.gwrt-devpair-right{padding-left:16px;border-left:1px solid var(--border-primary)}
+.gwrt-devpair-head{display:flex;align-items:baseline;justify-content:space-between;gap:8px}
+.gwrt-devpair-lbl{font-size:11px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--text-secondary)}
+.gwrt-devpair-val{font-size:1.7rem;font-weight:700;line-height:1.05;letter-spacing:-.02em}
+.gwrt-devpair-sub,.gwrt-devpair-tcpudp{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0;font-family:var(--font-mono);line-height:1.2}
+.gwrt-devpair-metric{display:inline-flex;align-items:baseline;gap:6px;white-space:nowrap}
+#gwrtTopDevices{--gwrt-device-icon-size:28px;display:flex;flex:1 1 0;flex-direction:row;flex-wrap:wrap;align-items:flex-start;align-content:flex-start;gap:8px;width:100%;min-width:0;min-height:0;max-height:none;margin-top:8px;padding:4px 4px 0 0;box-sizing:border-box;overflow:hidden}
+#gwrtTopDevices .top-dev-icon,#gwrtTopDevices .top-dev-more{width:var(--gwrt-device-icon-size);height:var(--gwrt-device-icon-size);flex:0 0 var(--gwrt-device-icon-size)}
+#gwrtTopDevices.gwrt-dev-wall-filtered{flex-wrap:nowrap;align-items:flex-start}
+#gwrtTopDevices .top-dev-filter-label{min-width:0}
+.gwrt-devpair-txt{font-size:.62rem;color:var(--text-tertiary);letter-spacing:.08em}
+.gwrt-devpair-num{font-size:.8rem;font-weight:800;color:var(--text-secondary)}
+.gwrt-devpair-sep{color:var(--text-tertiary)}
+
+.gwrt-netspeed-line{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-left:auto;font-size:.7rem;color:var(--text-secondary);max-width:70%}
+.gwrt-netspeed-line span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.gwrt-netspeed-dot{color:var(--text-tertiary)}
+.gwrt-wan-trend-full{min-height:120px;height:120px;margin-top:12px}
+.gwrt-wan-trend-full .gwrt-wan-trend-svg{height:120px}
+
+@media(max-width:640px){
+  .gwrt-netspeed-line{max-width:100%}
+}
+
+.gwrt-netspeed-head{display:flex;align-items:center;gap:12px;min-width:0;overflow-x:auto;white-space:nowrap;scrollbar-width:thin}
+.gwrt-netspeed-head .stat-card-label{flex:0 0 auto;margin:0}
+#gwrtWanProto{text-transform:none}
+#gwrtWanProto.is-offline{color:var(--accent-danger)}
+.gwrt-netspeed-meta{display:flex;flex-direction:row;align-items:center;gap:12px;flex:0 0 auto;max-width:none;min-width:0;color:var(--text-secondary);font-family:var(--font-mono);font-size:.64rem;line-height:1.35;text-align:left}
+.gwrt-netspeed-meta span{max-width:none;white-space:nowrap}
+.gwrt-netspeed-address{display:inline-flex;align-items:baseline;gap:4px}
+.gwrt-netspeed-address-label{color:var(--text-tertiary)}
+.gwrt-netspeed-rate-row{align-items:baseline;margin-top:16px}
+.gwrt-netspeed-rate-item{min-width:0;color:var(--text-secondary);font-family:var(--font-mono);font-size:.75rem}
+.gwrt-netspeed-rate-item strong{font-size:.82rem}
+.gwrt-netspeed-total{font-family:var(--font-mono);font-size:1.2rem;color:var(--text-primary)}
+.gwrt-netspeed-total-wrap{display:inline-flex;flex-direction:column;align-items:center;gap:5px}
+.gwrt-netspeed-runtime{margin-left:8px;font-family:var(--font-mono);font-size:.58rem;font-weight:400;letter-spacing:0;text-transform:none;color:var(--text-tertiary)}
+.gwrt-wan-trend-big{height:160px;min-height:160px;background:transparent;border:0;overflow:visible}
+.gwrt-wan-trend-big .gwrt-wan-trend-svg{height:160px;border-radius:inherit;overflow:hidden}
+.gwrt-wan-trend-big .gwrt-wan-trend-empty{height:160px}
+.gwrt-wan-trend-big .gwrt-wan-trend-popup{left:8px;bottom:8px;max-height:calc(100% - 16px)}
+.gwrt-client-status{display:inline-flex;align-items:center;gap:6px;font-family:var(--font-sans);font-size:.72rem;font-weight:700}
+.gwrt-client-status i{width:7px;height:7px;border-radius:50%;background:currentColor}
+.gwrt-client-status.is-online{color:var(--accent-secondary)}
+.gwrt-client-status.is-offline{color:var(--accent-danger)}
+.gwrt-dhcp-table tbody tr.is-offline{color:var(--text-tertiary)}
+
+@media(max-width:640px){
+  .gwrt-devpair-left{padding-right:12px}
+  .gwrt-devpair-right{padding-left:12px}
+  .gwrt-netspeed-head{gap:10px}
+  .gwrt-netspeed-meta{gap:10px}
+  .gwrt-netspeed-rate-row{gap:6px}
+  .gwrt-netspeed-total{font-size:1rem}
+}
+
+@media(min-width:901px) and (max-width:1000px){
+  .stat-card[data-gwrt="netspeed"]{grid-column:span 2}
+}
+
+/* Compact WAN/device row and one menu panel with a persistent right rail. */
+.stat-card[data-gwrt="netspeed"],.stat-card[data-gwrt="devices"]{height:196px;box-sizing:border-box;padding:14px 16px;gap:6px}
+.stat-card[data-gwrt="netspeed"] .gwrt-netspeed-rate-row{margin-top:6px}
+.stat-card[data-gwrt="netspeed"] .gwrt-wan-trend-big{flex:1;min-height:0;height:auto;margin:4px 0 0}
+.stat-card[data-gwrt="netspeed"] .gwrt-wan-trend-svg,.stat-card[data-gwrt="netspeed"] .gwrt-wan-trend-empty{height:100%}
+.stat-card[data-gwrt="devices"] .gwrt-devpair-head{gap:5px}
+.stat-card[data-gwrt="devices"] .gwrt-devpair-left{padding-right:12px}
+.stat-card[data-gwrt="devices"] .gwrt-devpair-right{padding-left:12px}
+.stat-card[data-gwrt="devices"] .gwrt-devpair-val{font-size:1.5rem}
+.stat-card[data-gwrt="devices"] .gwrt-devpair-lbl{letter-spacing:.02em}
+.stat-card[data-gwrt="devices"] .gwrt-devpair-txt{letter-spacing:.02em}
+.stat-card[data-gwrt="devices"] .gwrt-devpair-metric{gap:4px}
+.gwrt-home-menu-shell{display:grid;grid-template-columns:minmax(0,1fr) 76px;gap:18px;margin-top:18px;padding-top:18px;border-top:1px solid var(--border-primary);min-width:0}
+.gwrt-home-menu-shell[hidden]{display:none!important}
+.gwrt-home-menu-content{min-width:0}
+.gwrt-home-menu-panel{min-width:0;padding:0}
+.gwrt-home-menu-panel[hidden]{display:none!important}
+.gwrt-home-menu-heading{display:flex;align-items:baseline;gap:10px;margin:0 0 14px;font-size:.85rem;font-weight:700;color:var(--text-secondary)}
+.gwrt-home-menu-heading small{font-size:.7rem;font-weight:400;color:var(--text-tertiary)}
+.gwrt-home-menu-tabs{display:flex;flex-direction:column;align-self:start;gap:6px;padding-left:12px;border-left:1px solid var(--border-primary)}
+.gwrt-home-menu-tab{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;min-width:0;width:100%;min-height:58px;padding:9px 5px;border:1px solid transparent;border-radius:10px;background:transparent;color:var(--text-tertiary);font:inherit;font-size:.72rem;line-height:1.2;cursor:pointer;transition:color .15s,background .15s,border-color .15s}
+.gwrt-home-menu-tab .gwrt-sec-ico{width:19px;height:19px;stroke:currentColor}
+.gwrt-home-menu-tab:hover{color:var(--text-primary);background:var(--bg-tertiary)}
+.gwrt-home-menu-tab.is-active{color:var(--accent-primary);border-color:color-mix(in srgb,var(--accent-primary) 38%,transparent);background:color-mix(in srgb,var(--accent-primary) 10%,transparent)}
+.gwrt-home-menu-tab:focus-visible{outline:2px solid var(--accent-primary);outline-offset:2px}
+.gwrt-home-menu-tab.gwrt-drop-hover{border-color:var(--accent-primary);background:color-mix(in srgb,var(--accent-primary) 15%,transparent)}
+@media(min-width:901px){
+  .dashboard-grid{grid-template-columns:repeat(12,minmax(0,1fr))}
+  .stat-card[data-gwrt="sysinfo"],.stat-card[data-gwrt="cpu_temp"],.stat-card[data-gwrt="memstore"],.stat-card[data-gwrt="active_apps"]{grid-column:span 3}
+  .stat-card[data-gwrt="netspeed"]{grid-column:span 8}
+  .stat-card[data-gwrt="devices"]{grid-column:span 4}
+}
+@media(min-width:641px) and (max-width:900px){
+  .dashboard-grid{grid-template-columns:repeat(12,minmax(0,1fr))}
+  .stat-card[data-gwrt="sysinfo"],.stat-card[data-gwrt="cpu_temp"],.stat-card[data-gwrt="memstore"],.stat-card[data-gwrt="active_apps"]{grid-column:span 6}
+  .stat-card[data-gwrt="netspeed"]{grid-column:span 8}
+  .stat-card[data-gwrt="devices"]{grid-column:span 4;height:196px;padding:12px 10px}
+  .stat-card[data-gwrt="devices"] .gwrt-devpair-left{padding-right:8px}
+  .stat-card[data-gwrt="devices"] .gwrt-devpair-right{padding-left:8px}
+  .stat-card[data-gwrt="devices"] .gwrt-devpair-val{font-size:1.2rem}
+  .stat-card[data-gwrt="devices"] .gwrt-devpair-lbl{font-size:.58rem}
+  .stat-card[data-gwrt="devices"] .gwrt-devpair-txt{font-size:.5rem}
+  .stat-card[data-gwrt="devices"] .gwrt-devpair-num{font-size:.64rem}
+  .stat-card[data-gwrt="devices"] .gwrt-devpair-metric{gap:2px}
+}
+@media(max-width:640px){
+  .stat-card[data-gwrt="devices"]{height:196px;min-height:196px}
+  .gwrt-home-menu-shell{grid-template-columns:minmax(0,1fr) 58px;gap:10px;margin-top:14px;padding-top:14px}
+  .gwrt-home-menu-tabs{padding-left:8px;gap:5px}
+  .gwrt-home-menu-tab{min-height:54px;font-size:.66rem}
+  .gwrt-home-menu-panel .icon-block{grid-template-columns:repeat(auto-fill,minmax(76px,1fr));gap:8px}
+}
+
+/* Authenticated Mesh APs live on their LAN / wireless topology branches. */
+.gwrt-mesh-ap-children{display:flex;flex-wrap:wrap;justify-content:center;align-items:flex-start;gap:0 12px;width:100%;min-width:0}
+.gwrt-mesh-ap-branch{display:flex;flex-direction:column;align-items:center;min-width:110px;max-width:260px;flex:1 1 110px}
+.gwrt-mesh-ap-node{display:flex;flex-direction:column;align-items:center;gap:3px;width:130px;max-width:100%;padding:3px 4px;color:var(--text-primary);box-sizing:border-box}
+.gwrt-mesh-ap-icon{display:inline-flex!important;align-items:center;justify-content:center;box-sizing:border-box;flex:0 0 40px;width:40px;height:40px;border:1.7px solid #fff;border-radius:50%;color:var(--text-primary)!important;background:transparent}
+.gwrt-mesh-ap-icon.wireless{border-style:dashed}
+.gwrt-mesh-ap-icon.unknown{border-style:dotted}
+.gwrt-mesh-ap-icon svg{display:block;width:24px;height:24px}
+.gwrt-mesh-ap-name{max-width:100%;font-size:.62rem;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gwrt-mesh-ap-sub{max-width:100%;font-size:.53rem;color:var(--text-tertiary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gwrt-mesh-link{display:block;flex:none;overflow:visible;color:var(--border-primary)}
+.gwrt-mesh-link line{stroke:currentColor;stroke-width:1;vector-effect:non-scaling-stroke}
+.gwrt-mesh-link.wireless line{stroke-dasharray:3 3}
+.gwrt-mesh-client-row{display:flex;flex-wrap:wrap;justify-content:center;align-items:flex-start;max-width:230px;gap:6px 2px;width:100%}
+.gwrt-mesh-client-row .topo-dev-col{width:46px;box-sizing:border-box}
+.topo-ports-bus .topo-port-col.has-mesh,.topo-ports-bus.topo-ports-wide .topo-port-col.has-mesh{flex:1 0 150px;min-width:150px;max-width:280px}
+.topo-node.mesh{border-color:var(--text-secondary)}
+.gwrt-mesh-info{flex-wrap:wrap;gap:8px 12px}
+.gwrt-mesh-legend{display:inline-flex;align-items:center;gap:5px;font-size:.56rem;color:var(--text-tertiary)}
+.gwrt-mesh-legend i{display:inline-block;width:11px;height:11px;border:1px solid #fff;border-radius:50%;margin-left:4px;box-sizing:border-box}
+.gwrt-mesh-legend i.wireless{border-style:dashed}

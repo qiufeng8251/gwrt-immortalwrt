@@ -509,7 +509,7 @@ body::before{content:"";position:fixed;inset:0;z-index:20000;pointer-events:none
 .gwrt-devcon-lbl{color:var(--text-tertiary);font-weight:700;letter-spacing:.06em}
 .gwrt-devcon-num{font-family:var(--font-mono);font-weight:800;color:var(--text-primary)}
 .gwrt-devcon-sep{color:var(--text-tertiary)}
-.gwrt-devcon-wave{flex:1;min-height:40px;margin-top:2px;border-radius:8px;background:transparent;overflow:hidden;position:relative}
+.gwrt-devcon-wave{flex:1;min-height:40px;margin-top:2px;border-radius:8px;background:var(--bg-tertiary);overflow:hidden;position:relative}
 
 /* 网速卡：IP 右上 + 趋势 */
 .gwrt-netspeed-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
@@ -835,10 +835,17 @@ body[data-page="admin-system-package-manager"] #packages .cbi-section-actions .b
 @media(max-width:520px){.gwrt-navbar-monitor{font-size:.52rem;line-height:1.1}.gwrt-navbar-monitor-item{padding:0 3px}.gwrt-navbar-monitor-label{font-size:.51rem}.gwrt-navbar-monitor-item b{font-size:.52rem}}
 
 /* r123: fixed aggregates in the existing upper bar; model artwork uses the existing node sizes. */
-.gwrt-navbar-traffic{display:contents}
+.gwrt-navbar-traffic{display:inline-flex;align-items:center;flex:0 1 auto;min-width:0;gap:1px;padding-left:3px;border-left:1px solid var(--border-primary);white-space:nowrap}
+.gwrt-navbar-period{display:inline-flex;align-items:baseline;gap:2px;padding:0 3px;white-space:nowrap}
+.gwrt-navbar-period-label{color:var(--text-tertiary);font-size:.55rem;font-weight:600}
+.gwrt-navbar-period b{font:600 .58rem var(--font-mono);color:var(--text-primary)}
+@media(max-width:900px){.gwrt-navbar-traffic{padding-left:2px}.gwrt-navbar-period{gap:1px;padding:0 2px}.gwrt-navbar-period b{font-size:.55rem}}
+@media(max-width:720px){.gwrt-navbar-traffic{flex-wrap:wrap;row-gap:1px}.gwrt-navbar-period{padding:0 3px}}
 .gwrt-navbar-traffic b{color:var(--text-primary)}
 .gwrt-wan-trend{background:transparent}
-.gwrt-product-art{display:inline-flex;width:100%;height:100%;align-items:center;justify-content:center}
+.gwrt-product-art{display:inline-flex;width:32px;height:32px;flex:0 0 auto;align-items:center;justify-content:center}
+.topo-node.router .topo-icon>.gwrt-product-art{width:40px;height:40px}
+.gwrt-mesh-ap-icon>.gwrt-product-art{width:100%;height:100%}
 .gwrt-router-product{display:block;width:100%;height:100%;max-width:100%;object-fit:contain;filter:none!important}
 .gwrt-router-product[hidden],.gwrt-product-fallback[hidden]{display:none!important}
 .gwrt-product-fallback{display:inline-flex;align-items:center;justify-content:center;width:100%;height:100%}

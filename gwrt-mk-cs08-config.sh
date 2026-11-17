@@ -75,12 +75,12 @@ done
 # --- 2b. 去 CS-02 专用 Athena 点阵屏（CS-08 无屏幕硬件，GPIO 69/70/73/74
 #         在 ipq5322 TLMM 上不存在，装了也只会常驻失败）---
 for p in athena-led luci-app-athena-led; do
-	sed -i "s|^CONFIG_PACKAGE_${p}=y\$|# CONFIG_PACKAGE_${p} is not set|" "$OUT"
-	sed -i "s|^CONFIG_DEFAULT_${p}=y\$|# CONFIG_DEFAULT_${p} is not set|" "$OUT"
+	sed -i "s|^CONFIG_PACKAGE_${p}=y$|# CONFIG_PACKAGE_${p} is not set|" "$OUT"
+	sed -i "s|^CONFIG_DEFAULT_${p}=y$|# CONFIG_DEFAULT_${p} is not set|" "$OUT"
 done
 
 # --- 2c. M.2 槽（pcie1）NVMe 支持：cs-06 基配置里显式关了 kmod-nvme ---
-sed -i "/^# CONFIG_PACKAGE_kmod-nvme is not set\$/d" "$OUT"
+sed -i "/^# CONFIG_PACKAGE_kmod-nvme is not set$/d" "$OUT"
 grep -q "^CONFIG_PACKAGE_kmod-nvme=y$" "$OUT" || \
 	echo "CONFIG_PACKAGE_kmod-nvme=y" >> "$OUT"
 

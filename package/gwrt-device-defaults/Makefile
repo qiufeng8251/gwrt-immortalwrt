@@ -1,12 +1,12 @@
 #
-# GWRT 机型默认配置（仅 XINGLOO AX3000 / CF-WR630AX 使用）
-# 首次启动给无线设置一个可用的默认 SSID/密码，避免"WiFi 未配置"。
+# GWRT cross-platform defaults. New radios receive their settings directly
+# from wifi-scripts; the remaining first-boot work preserves saved configuration.
 #
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=gwrt-device-defaults
 PKG_VERSION:=1.0
-PKG_RELEASE:=6
+PKG_RELEASE:=8
 PKG_LICENSE:=GPL-2.0
 
 include $(INCLUDE_DIR)/package.mk
@@ -14,14 +14,15 @@ include $(INCLUDE_DIR)/package.mk
 define Package/gwrt-device-defaults
   SECTION:=base
   CATEGORY:=Base system
-  TITLE:=GWRT XINGLOO AX3000 first-boot defaults
-  DEPENDS:=+jshn +EMMC_SUPPORT:sgdisk
+  TITLE:=GWRT cross-platform first-boot defaults
+  DEPENDS:=+jshn +gwrt-wifi-defaults +gwrt-emmc-storage
   PKGARCH:=all
 endef
 
 define Package/gwrt-device-defaults/description
-  First-boot defaults for XINGLOO AX3000 (CF-WR630AX):
-  wireless SSID/key, radios enabled, LAN/WAN sanity check.
+  Cross-platform GWRT wireless generation policy, first-boot defaults,
+  offline wifiroam provisioning, eMMC data/swap preparation and LAN/WAN
+  sanity checks.
 endef
 
 define Build/Compile
@@ -44,7 +45,6 @@ define Package/gwrt-device-defaults/install
 	$(INSTALL_BIN) ./files/99_gwrt-data-part $(1)/etc/uci-defaults/99_gwrt-data-part
 	$(INSTALL_BIN) ./files/99_gwrt-services-off $(1)/etc/uci-defaults/99_gwrt-services-off
 	$(INSTALL_BIN) ./files/99_gwrt-led-defaults $(1)/etc/uci-defaults/99_gwrt-led-defaults
-	$(INSTALL_BIN) ./files/99_gwrt-daed-dirs $(1)/etc/uci-defaults/99_gwrt-daed-dirs
 	$(INSTALL_BIN) ./files/gwrt-ssid-name $(1)/usr/libexec/gwrt-ssid-name
 	$(INSTALL_BIN) ./files/gwrt-ss01-firstboot $(1)/usr/libexec/gwrt-ss01-firstboot
 	$(INSTALL_DATA) ./files/apk/luci-app-wifiroam-*.apk ./files/apk/luci-i18n-wifiroam-*.apk ./files/apk/wifiroam-*.apk $(1)/usr/share/gwrt/apk/
@@ -56,6 +56,7 @@ endif
 	$(INSTALL_DATA) ./files/wifiroam/*.js $(1)/usr/share/gwrt/wifiroam/
 	$(INSTALL_DATA) ./files/wifiroam/wifiroamd.uc $(1)/usr/share/gwrt/wifiroam/wifiroamd.uc
 	$(INSTALL_DATA) ./files/wifiroam/menu.json $(1)/usr/share/gwrt/wifiroam/menu.json
+	$(INSTALL_DATA) ./files/wifiroam.default-config $(1)/usr/share/gwrt/wifiroam/default-config
 endef
 
 $(eval $(call BuildPackage,gwrt-device-defaults))
