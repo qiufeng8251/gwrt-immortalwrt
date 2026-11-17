@@ -833,3 +833,21 @@ body[data-page="admin-system-package-manager"] #packages .cbi-section-actions .b
 @media(max-width:640px){.gwrt-wan-traffic-row{gap:4px;font-size:.59rem;grid-template-columns:34px minmax(0,1fr) minmax(0,1fr) auto}.gwrt-wan-traffic-row b{font-size:.62rem}.gwrt-wan-traffic-row>strong{font-size:.61rem}.gwrt-wan-periods{gap:2px 8px}}
 @media(max-width:720px){.gwrt-navbar-monitor{flex-wrap:wrap;row-gap:2px}.gwrt-navbar-monitor-item{flex-shrink:0}.gwrt-navbar-process-detail{max-width:110px}}
 @media(max-width:520px){.gwrt-navbar-monitor{font-size:.52rem;line-height:1.1}.gwrt-navbar-monitor-item{padding:0 3px}.gwrt-navbar-monitor-label{font-size:.51rem}.gwrt-navbar-monitor-item b{font-size:.52rem}}
+
+/* r123: fixed aggregates in the existing upper bar; model artwork uses the existing node sizes. */
+.gwrt-navbar-traffic{display:inline-flex;align-items:center;flex:0 1 auto;min-width:0;gap:1px;padding-left:3px;border-left:1px solid var(--border-primary);white-space:nowrap}
+.gwrt-navbar-period{display:inline-flex;align-items:baseline;gap:2px;padding:0 3px;white-space:nowrap}
+.gwrt-navbar-period-label{color:var(--text-tertiary);font-size:.55rem;font-weight:600}
+.gwrt-navbar-period b{font:600 .58rem var(--font-mono);color:var(--text-primary)}
+@media(max-width:900px){.gwrt-navbar-traffic{padding-left:2px}.gwrt-navbar-period{gap:1px;padding:0 2px}.gwrt-navbar-period b{font-size:.55rem}}
+@media(max-width:720px){.gwrt-navbar-traffic{flex-wrap:wrap;row-gap:1px}.gwrt-navbar-period{padding:0 3px}}
+.gwrt-navbar-traffic b{color:var(--text-primary)}
+.gwrt-wan-trend{background:transparent}
+.gwrt-product-art{display:inline-flex;width:32px;height:32px;flex:0 0 auto;align-items:center;justify-content:center}
+.topo-node.router .topo-icon>.gwrt-product-art{width:40px;height:40px}
+.gwrt-mesh-ap-icon>.gwrt-product-art{width:100%;height:100%}
+.gwrt-router-product{display:block;width:100%;height:100%;max-width:100%;object-fit:contain;filter:none!important}
+.gwrt-router-product[hidden],.gwrt-product-fallback[hidden]{display:none!important}
+.gwrt-product-fallback{display:inline-flex;align-items:center;justify-content:center;width:100%;height:100%}
+.topo-dev-icon .gwrt-product-art{width:28px;height:28px}
+.gwrt-mesh-ap-icon:has(.gwrt-router-product:not([hidden])){border-color:transparent}

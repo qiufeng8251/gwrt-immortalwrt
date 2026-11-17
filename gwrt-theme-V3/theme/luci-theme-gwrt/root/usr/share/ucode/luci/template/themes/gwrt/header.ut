@@ -80,7 +80,7 @@
 	</script>
 
 	<!-- Main Stylesheet -->
-	<link rel="stylesheet" href="/luci-static/gwrt/css/cascade.css?v=20261117r122">
+	<link rel="stylesheet" href="/luci-static/gwrt/css/cascade.css?v=20261118r123">
 
 	<!-- Stylesheets -->
 	{% if (node?.css): %}
@@ -134,6 +134,7 @@
 								<span class="gwrt-navbar-monitor-item gwrt-navbar-processes" id="gwrtNavbarProcesses" data-state="loading" title="正在读取进程状态">
 									<span class="gwrt-navbar-monitor-label">进程</span><b id="gwrtNavbarProcessesText">—</b><span class="gwrt-navbar-process-detail" id="gwrtNavbarTopProcess"></span>
 								</span>
+								<span class="gwrt-navbar-traffic" id="gwrtWanPeriods" aria-label="今天、本周、本月、本年和累计流量"></span>
 							</div>
 						</div>
 							<div class="navbar-controls">

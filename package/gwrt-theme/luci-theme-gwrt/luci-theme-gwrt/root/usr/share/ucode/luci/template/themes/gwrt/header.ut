@@ -80,7 +80,7 @@
 	</script>
 
 	<!-- Main Stylesheet -->
-	<link rel="stylesheet" href="/luci-static/gwrt/css/cascade.css?v=20261113r117">
+	<link rel="stylesheet" href="/luci-static/gwrt/css/cascade.css?v=20261118r123">
 
 	<!-- Stylesheets -->
 	{% if (node?.css): %}
@@ -115,6 +115,27 @@
 							<a class="brand" href="{{ dispatcher.build_url('admin/status') }}">
 								<span class="brand-text">{{ hostname }}</span>
 							</a>
+							<div class="gwrt-navbar-monitor" id="gwrtNavbarMonitor" role="status" aria-live="polite" aria-label="路由状态监控">
+								<span class="gwrt-navbar-monitor-item" id="gwrtNavbarUptime" data-state="loading" title="路由运行时间">
+									<span class="gwrt-navbar-monitor-label">运行</span><b id="gwrtNavbarUptimeText">—</b>
+								</span>
+								<span class="gwrt-navbar-monitor-item gwrt-navbar-health" id="gwrtNavbarHealth" data-state="loading" title="正在检查路由状态">
+									<span class="gwrt-navbar-monitor-label">路由</span><b id="gwrtNavbarHealthText">检查中</b>
+								</span>
+								<span class="gwrt-navbar-monitor-item" id="gwrtNavbarDns" data-state="loading" title="正在检查本机 DNS">
+									<span class="gwrt-navbar-monitor-label">DNS</span><b id="gwrtNavbarDnsText">检查中</b>
+								</span>
+								<span class="gwrt-navbar-monitor-item" id="gwrtNavbarExternal" data-state="loading" title="正在检查对外网络">
+									<span class="gwrt-navbar-monitor-label">外网</span><b id="gwrtNavbarExternalText">检查中</b>
+								</span>
+								<span class="gwrt-navbar-monitor-item" id="gwrtNavbarDevices" data-state="loading" title="正在读取真实在线设备数">
+									<span class="gwrt-navbar-monitor-label">在线</span><b id="gwrtNavbarDevicesText">—</b>
+								</span>
+								<span class="gwrt-navbar-monitor-item gwrt-navbar-processes" id="gwrtNavbarProcesses" data-state="loading" title="正在读取进程状态">
+									<span class="gwrt-navbar-monitor-label">进程</span><b id="gwrtNavbarProcessesText">—</b><span class="gwrt-navbar-process-detail" id="gwrtNavbarTopProcess"></span>
+								</span>
+								<span class="gwrt-navbar-traffic" id="gwrtWanPeriods" aria-label="今天、本周、本月、本年和累计流量"></span>
+							</div>
 						</div>
 							<div class="navbar-controls">
 								<a class="gwrt-native-link" href="#" title="原生 LuCI · 81" aria-label="打开原生 LuCI · 81" onclick="var p=location.port||(location.protocol==='https:'?'443':'80');var secure=location.protocol==='https:'||p==='444'||p==='443';location.href=(secure?'https':'http')+'://'+location.hostname+':'+(secure?'444':'81')+location.pathname+location.search+location.hash;return false;"><span class="gwrt-go-badge" aria-hidden="true">G/O</span></a>

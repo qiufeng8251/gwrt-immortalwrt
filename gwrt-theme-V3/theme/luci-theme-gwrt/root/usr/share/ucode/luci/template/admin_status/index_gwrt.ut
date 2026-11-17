@@ -80,7 +80,6 @@
 				<div class="gwrt-wan-traffic-row gwrt-wan-ipv4"><strong>IPv4</strong><span>↑ <b id="gwrtWan4Up">-</b></span><span>↓ <b id="gwrtWan4Down">-</b></span><span class="gwrt-wan-total">总 <b id="gwrtWan4Total">-</b></span></div>
 				<div class="gwrt-wan-traffic-row gwrt-wan-ipv6"><strong>IPv6</strong><span>↑ <b id="gwrtWan6Up">-</b></span><span>↓ <b id="gwrtWan6Down">-</b></span><span class="gwrt-wan-total">总 <b id="gwrtWan6Total">-</b></span></div>
 				<div class="gwrt-wan-trend" id="gwrtWanTrend" aria-label="IPv4 和 IPv6 上下行合计速率曲线"></div>
-				<div class="gwrt-wan-periods" id="gwrtWanPeriods" aria-label="流量累计与每日记录"></div>
 			</div>
 		</div>
 
@@ -154,6 +153,7 @@
 	</div>
 </div>
 
+<script src="/luci-static/gwrt/resources/router-models.js?v=20261118r123"></script>
 <script>
 (function(){
 function S(id,t){var e=document.getElementById(id);if(e)e.textContent=t;}
@@ -2938,10 +2938,15 @@ function topoSignalText(d){
   var label=Math.round(sig)+' dBm';
   return '<small class="gwrt-topo-signal" aria-label="信号 '+esc(label)+'">'+esc(label)+'</small>';
 }
+function gwrtProductIcon(device,fallback){
+  var src=typeof window.gwrtRouterImage==='function'?window.gwrtRouterImage(device):'';
+  if(!src)return fallback;
+  return '<span class="gwrt-product-art"><img class="gwrt-router-product" src="'+esc(src)+'" alt="'+esc(device&&device.model||'路由器')+'" onerror="this.hidden=true;this.nextElementSibling.hidden=false"><span class="gwrt-product-fallback" hidden>'+fallback+'</span></span>';
+}
 function topoDevIcon(d){
   gwrtApplyDeviceAlias(d);
   var name=devDisplayName(d);
-  return '<span class="topo-dev-icon topo-device" title="'+esc(name)+'">'+devLogo(name,gwrtDeviceAliasLookupKey(d))+topoSignalText(d)+'</span>';
+  return '<span class="topo-dev-icon topo-device" title="'+esc(name)+'">'+gwrtProductIcon(d,devLogo(name,gwrtDeviceAliasLookupKey(d)))+topoSignalText(d)+'</span>';
 }
 /* 中层设备三级识别：人工标注 > 主机名特征 > uplink 被引用；无网管交换机/无 IP 纯 AP 被动不可见，只能判交换机 */
 function topoInfraKind(kids){
@@ -3057,7 +3062,7 @@ function renderTopology(ports,states,devs,wifiMacMap,bridgePorts){
   (mt.nodes||[]).forEach(function(n){
     var parent=gwrtMeshNodeKey({id:n&&n.parent});
     if(!n||n.type!=='client'||!meshById[parent]||meshById[gwrtMeshNodeKey(n)])return;
-    (meshClients[parent]=meshClients[parent]||[]).push({name:n.custom_name||n.name,hostname:n.hostname,mac:n.mac||n.id,ip:n.ip,signal:n.conn&&n.conn.rssi,online:true,conn:gwrtMeshLinkType(n.conn)==='wireless'?'wifi':'wired'});
+    (meshClients[parent]=meshClients[parent]||[]).push({name:n.custom_name||n.name,hostname:n.hostname,model:n.model,board_name:n.board_name,mac:n.mac||n.id,ip:n.ip,signal:n.conn&&n.conn.rssi,online:true,conn:gwrtMeshLinkType(n.conn)==='wireless'?'wifi':'wired'});
     meshExcluded[normMac(n.mac||n.id)]=1;
   });
   meshPeers.forEach(function(n){
@@ -3137,7 +3142,7 @@ function renderTopology(ports,states,devs,wifiMacMap,bridgePorts){
     var via=kind==='wireless'?'无线回传':(kind==='wired'?'有线回传':'回传待确认');
     var title='已认证 Mesh '+(n.role==='cap'?'主AP':'子AP')+' · '+name+' · '+via+(n.ip?' · '+n.ip:'')+(uplink&&uplink.ssid?' · '+uplink.ssid:'')+(linkMetric?' · '+linkMetric:'');
     var h='<div class="gwrt-mesh-ap-branch" data-mesh-id="'+esc(id)+'" data-mesh-link="'+kind+'">'+(upstream?'':meshConn(kind));
-    h+='<div class="gwrt-mesh-ap-node" title="'+esc(title)+'"><span class="gwrt-mesh-ap-icon '+kind+'">'+TOPO_SVG.ap+'</span>'
+    h+='<div class="gwrt-mesh-ap-node" title="'+esc(title)+'"><span class="gwrt-mesh-ap-icon '+kind+'">'+gwrtProductIcon(n,TOPO_SVG.ap)+'</span>'
       +'<span class="gwrt-mesh-ap-name">'+esc(name)+'</span><span class="gwrt-mesh-ap-sub">'+(n.role==='cap'?'主AP · ':'')+via+'</span>'
       +(n.ip?'<span class="gwrt-mesh-ap-sub">'+esc(n.ip)+'</span>':'')
       +(linkMetric?'<span class="gwrt-mesh-ap-link-stats">'+esc(linkMetric)+'</span>':'')+'</div>';
@@ -3188,9 +3193,9 @@ function renderTopology(ports,states,devs,wifiMacMap,bridgePorts){
       var wideCls=wide?' topo-switch-wide':'';
       if(infra.kind==='compound'){
         s+='<div class="topo-switch-node'+wideCls+'" title="交换机 + AP · '+esc(infraName)+'">'+TOPO_SVG.sw+'</div>'+connV;
-        s+='<div class="topo-ap-node'+wideCls+'" title="AP · '+esc(infraName)+'">'+TOPO_SVG.ap+'</div>'+connV;
+        s+='<div class="topo-ap-node'+wideCls+'" title="AP · '+esc(infraName)+'">'+gwrtProductIcon(infra.dev,TOPO_SVG.ap)+'</div>'+connV;
       }else if(infra.kind==='ap'){
-        s+='<div class="topo-ap-node'+wideCls+'" title="AP · '+esc(infraName)+'">'+TOPO_SVG.ap+'</div>'+connV;
+        s+='<div class="topo-ap-node'+wideCls+'" title="AP · '+esc(infraName)+'">'+gwrtProductIcon(infra.dev,TOPO_SVG.ap)+'</div>'+connV;
       }else if(infra.named){
         s+='<div class="topo-switch-node'+wideCls+'" title="交换机 · '+esc(infraName)+'">'+TOPO_SVG.sw+'</div>'+connV;
       }else{
@@ -3240,7 +3245,7 @@ function renderTopology(ports,states,devs,wifiMacMap,bridgePorts){
   }
   h+='<div class="topo-center"><div class="topo-node router">';
   var meshRole=/^(cap|sap)$/.test(String(mt.role||''))?mt.role:'';
-  h+='<span class="topo-icon'+(meshRole?' gwrt-mesh-ap-icon '+(meshRole==='sap'?gwrtMeshLinkType(meshSelfNode&&meshSelfNode.uplink):'wired'):'')+'">'+(meshRole?TOPO_SVG.ap:TOPO_SVG.station)+'</span>';
+  h+='<span class="topo-icon'+(meshRole?' gwrt-mesh-ap-icon '+(meshRole==='sap'?gwrtMeshLinkType(meshSelfNode&&meshSelfNode.uplink):'wired'):'')+'">'+gwrtProductIcon(window._gwrtBoardInfo||meshSelfNode,meshRole?TOPO_SVG.ap:TOPO_SVG.station)+'</span>';
   h+='<span class="topo-label">GWRT'+(meshRole==='cap'?' · 主AP':(meshRole==='sap'?' · 子AP':''))+'</span></div></div>';
   h+=connV;
 
@@ -3453,12 +3458,12 @@ function renderDhcp(leases,bdev,bOnline,oafUsers,hostHints){
   updateLeasesFoldUi();
 }
 
-/* The router owns sampling and daily accounting. Local cache also paints
+/* The router owns sampling and aggregate accounting. Local cache also paints
  * the last valid graph immediately while the first RPC is pending. */
 var gwrtWanTraffic=null;
 function wanNumber(n){return n!==null&&n!==undefined&&isFinite(Number(n))&&Number(n)>=0;}
 function wanFamilyPoint(p){return p&&wanNumber(p.up)&&wanNumber(p.down)?Number(p.up)+Number(p.down):null;}
-function wanTrafficValid(d){return d&&d.version===1&&d.families&&wanNumber(d.total)&&Array.isArray(d.history);}
+function wanTrafficValid(d){return d&&(d.version===1||d.version===2||d.version===3)&&d.families&&wanNumber(d.total)&&Array.isArray(d.history);}
 function gwrtWanTrafficSave(){
   try{if(gwrtWanTraffic)localStorage.setItem('gwrt_wan_traffic_v2',JSON.stringify(gwrtWanTraffic));}catch(e){}
 }
@@ -3475,21 +3480,7 @@ function renderWanTraffic(){
     S('gwrtWan'+n+'Down',v&&v.available&&wanNumber(v.down)?fmtSpeed(Number(v.down)):'-');
     S('gwrtWan'+n+'Total',known?F(Number(v.total)):'-');
   });
-  var periods=document.getElementById('gwrtWanPeriods');
-  if(periods){
-    periods.innerHTML='';
-    if(d){
-      var entries=[{label:'总量',total:Number(d.total)}].concat(Array.isArray(d.periods)?d.periods:[]);
-      entries.forEach(function(p){
-        var total=wanNumber(p.total)?Number(p.total):0,bytes=p.bytes||{};
-        if(!wanNumber(p.total))['up4','down4','up6','down6'].forEach(function(k){total+=Number(bytes[k])||0;});
-        var item=document.createElement('span'),value=document.createElement('b');
-        item.appendChild(document.createTextNode(String(p.label||'')+' '));value.textContent=F(total);item.appendChild(value);
-        item.title='每日记录自 '+new Date(Number(d.first)*1000).toLocaleString()+(p.bytes?'；IPv4 '+F((Number(bytes.up4)||0)+(Number(bytes.down4)||0))+'，IPv6 '+F((Number(bytes.up6)||0)+(Number(bytes.down6)||0)):'；IPv4 与 IPv6 累计合计');
-        periods.appendChild(item);
-      });
-    }
-  }
+  if(d&&typeof window.gwrtRenderTrafficPeriods==='function')window.gwrtRenderTrafficPeriods(d);
   renderWanTrend();
 }
 function renderWanTrend(){
@@ -3590,6 +3581,7 @@ function refresh(){
     window._gwrtClientsMap=clientsMap;
     window._gwrtTopoBridgePorts=topoPorts;
     var prevModel=window._gwrtBoardModel;
+    window._gwrtBoardInfo=board;
     window._gwrtBoardModel=String(board.model||board.release&&board.release.distribution||'');
     if(window._gwrtBoardModel!==prevModel&&window._gwrtPorts&&window._gwrtPortStates)renderPortStrip(window._gwrtPortStates,window._gwrtPorts);
     S('gwrtHostname',board.hostname||'GWRT');
