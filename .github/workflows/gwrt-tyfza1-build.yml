@@ -182,6 +182,11 @@ jobs:
           # python3-base 要先编 libffi 才有 ffi.h
           sed -i 's|^  DEPENDS:=+libpython3$|  DEPENDS:=+libpython3 +libffi|' \
               feeds/packages/lang/python/python3/Makefile
+          # mbedtls 3.6 + GCC 14 + musl fortify：aarch64 上 string.h 的
+          # __always_inline memset 会报 target specific option mismatch。
+          # 只对 mbedtls 关掉 FORTIFY（它自身已有边界检查），不影响其他包。
+          sed -i '1i PKG_FORTIFY_SOURCE:=0' feeds/packages/libs/mbedtls/Makefile
+          head -2 feeds/packages/libs/mbedtls/Makefile
 
       - name: Generate TYFZA1 config
         env:
