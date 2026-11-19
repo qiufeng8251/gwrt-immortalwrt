@@ -28,6 +28,11 @@ cd "$TOP"
 
 VER=${VER:-$(date +%y%m%d)-01}
 OUT=${OUT:-$TOP/configs/config.tyfza1-$VER}
+# CI 会传相对路径 OUT=.config；统一成绝对路径，后面的「是否同一个文件」判断才可靠
+case "$OUT" in
+	/*) ;;
+	*) OUT="$TOP/$OUT" ;;
+esac
 BAK="$TOP/.config.bak-$(date +%Y%m%d-%H%M%S)"
 DEVICE=${DEVICE:-tianyi_tyfza1}
 WITH_SMB=${WITH_SMB:-0}
