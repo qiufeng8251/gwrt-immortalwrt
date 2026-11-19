@@ -36,7 +36,7 @@ endef
 define Device/tianyi_tyfza1
   DEVICE_VENDOR := Tianyi
   DEVICE_MODEL := TYFZA1
-  DEVICE_VARIANT := native bring-up
+  DEVICE_VARIANT := UBI
   SUPPORTED_DEVICES += tianyi,tyfza1-2p5g
   DEVICE_DTS := rtl9617c-tyfza1 rtl9617c-tyfza1-nand-readonly rtl9617c-tyfza1-stock-ubi-readonly rtl9617c-tyfza1-mdio rtl9617c-tyfza1-xram-lan rtl9617c-tyfza1-dma-tx rtl9617c-tyfza1-ni rtl9617c-tyfza1-pon-status rtl9617c-tyfza1-pcie rtl9617c-tyfza1-pcie-2p5g rtl9617c-tyfza1-ubi rtl9617c-tyfza1-ubi-2p5g
   DEVICE_DTS_DIR := ../dts
