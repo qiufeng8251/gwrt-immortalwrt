@@ -40,6 +40,19 @@ jobs:
         with:
           fetch-depth: 0
 
+      # 混合模型：分支只放"内核 + 机型专属"的差异，共享层（主题/插件/脚本/
+      # 文档/配置生成器）每次从 master 取最新。这样改一次主题或插件，所有
+      # 机型下次构建都自动生效；而内核版本和 target 补丁互不干扰。
+      - name: Sync shared layer from master
+        if: github.ref != 'refs/heads/master'
+        run: |
+          set -euo pipefail
+          git fetch origin master --depth=1
+          git checkout origin/master -- \
+            package/ gwrt-theme-V3/ docs/ scripts/ configs/ .github/ AGENTS.md 'gwrt-*.sh'
+          echo "=== shared layer synced from master ==="
+          git status --short | head -20
+
       - name: Free disk space
         run: |
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
