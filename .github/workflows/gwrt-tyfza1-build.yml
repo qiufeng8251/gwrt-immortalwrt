@@ -181,7 +181,7 @@ jobs:
           OUT=.config VER="$VER" sh gwrt-mk-tyfza1-config.sh
           make defconfig
           sh gwrt-check-target.sh .config tyfza1
-          grep -E '^CONFIG_TARGET_(BOARD|SUBTARGET|PROFILE)|^CONFIG_VERSION_NUMBER|^CONFIG_PACKAGE_(honk|luci-app-honk|vmlinux-btf|luci-app-easytier|bandix-plus|ttyd|gwrt-wifiroam-v5|luci-app-pon-info)' .config
+          grep -E '^CONFIG_TARGET_(BOARD|SUBTARGET|PROFILE)|^CONFIG_VERSION_NUMBER|^CONFIG_PACKAGE_(honk|luci-app-honk|vmlinux-btf|luci-app-easytier|bandix-plus|ttyd|gwrt-wifiroam-v5|luci-app-pon-info)' .config || echo "(no matching config lines)"
 
       - name: Test mesh / pon-info helpers
         run: |

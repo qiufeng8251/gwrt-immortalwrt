@@ -55,7 +55,8 @@ CONFIG_PACKAGE_luci=y
 CONFIG_LUCI_LANG_zh_Hans=y
 EOF
 
-cp "$OUT" "$TOP/.config"
+# CI 里用 OUT=.config，这时 OUT 就是 .config，不能自拷贝
+[ "$OUT" = "$TOP/.config" ] || cp "$OUT" "$TOP/.config"
 make defconfig >/dev/null
 
 if [ "$DEVICE" = "all" ]; then
