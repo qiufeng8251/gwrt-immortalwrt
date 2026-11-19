@@ -21,6 +21,7 @@ mt7981            mt7981         mediatek     filogic    any
 mt7986            mt7986         mediatek     filogic    any
 an758x            an7581         airoha       an7581     any
 an7583            an7583         airoha       an7583     any
+tyfza1            rtl9617c       rtl9617c     generic    DEVICE_tianyi_tyfza1
 bdy-g98-direct    rk3588         rockchip     armv8      DEVICE_bdy_g98
 bdy-g98-uefi      arm64-efi      armsr        armv8      DEVICE_generic
 r68s              rk3568         rockchip     armv8      DEVICE_lunzn_fastrhino-r68s

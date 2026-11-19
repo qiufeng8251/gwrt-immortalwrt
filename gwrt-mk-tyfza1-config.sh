@@ -175,7 +175,7 @@ for p in \
 	honk \
 	luci-app-honk \
 	luci-lib-daeuniverse \
-	vmlinux-btf \
+	vmlinux-btf-builtin \
 	v2ray-geoip \
 	v2ray-geosite ; do
 	add_pkg "$p"
@@ -249,7 +249,9 @@ echo "==> 冲突检查（应为空）: $(grep -E '^CONFIG_PACKAGE_(kmod-mac80211
 cat <<'EOF'
 
 [hint] honk uses Doona Lite (feeds/daeuniverse/honk/files/config.dae).
-[hint] vmlinux-btf needs the kernel BTF blob at build time; pass:
-[hint]   make package/vmlinux-btf/compile VMLINUX_BTF_SRC=<vmlinux-with-btf> VMLINUX_BTF_VERSION=6.18.55
-[hint] before the full image build, otherwise that package fails.
+[hint] config-6.18 enables CONFIG_KERNEL_DEBUG_INFO_BTF, so the kernel carries
+[hint] its own BTF (/sys/kernel/btf/vmlinux). vmlinux-btf-builtin stands in for
+[hint] vmlinux-btf there; no VMLINUX_BTF_SRC blob is needed.
+[hint] honk itself needs Rust (stable + nightly with rust-src) and bpf-linker;
+[hint] use the gwrt-tyfza1-build workflow or install them on the build host.
 EOF
