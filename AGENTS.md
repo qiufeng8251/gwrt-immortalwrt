@@ -16,6 +16,23 @@
 
 ## 1. 构建与刷机
 
+2026-11-19 AN758x NPU 状态数据链路修复：主题 `gwrt-accelinfo` NPU 探测补齐 Airoha
+节点（`airoha-npu` 驱动、`soc/*.npu` 绑定设备），AN758x 首页 NPU 行不再被隐藏；
+`luci-app-airoha-npu` rpcd 后端补 per-SoC 固件回退（纯 ONT 板无 firmware-name 时
+版本不再 Unknown）、修 `npu_cores` "0\n0" 退化，PKG_RELEASE r3；mk-config 与种子
+config 固化 `CONFIG_KERNEL_DEVMEM`/busybox devmem（Frame Engine 与 CPU PLL/超频
+数据源，261022-01 首版缺失导致详情页整段无数据，需重编生效）。SoC 显示 en7581 属
+设计内核对无误。新增 `scripts/tests/test-gwrt-an758x-npu-status.sh`，与 socinfo
+回归均过；未编译/刷机/操作设备。详见 `docs/WORKLOG-20261119-an758x-npu-status.md`。
+
+2026-11-20 AN758x 固件加回 bandix-plus：主题流量监控取样唯一源是 Bandix
+（`luci.bandix_plus getSnapshot`），261022-01 按 50MB 预算排除导致光猫首页
+流量卡无数据；mk-config 把 bandix-plus/luci-app-bandix-plus/zh-cn 翻译移入
+安装清单并从两处 unset 清单移除，种子 config 同步 =y（本地产物不入库）。
+bandix-plus 为 aarch64 预编译 Rust 二进制（压缩包 2.6MB），依赖 zoneinfo-all/
+conntrack/iw 由构建自动解析。用户指示"没有就加入，然后推到 ihu"，改动连同
+NPU 修复一起推 `rothdren-lion/gwrt-immortalwrt` master。
+
 2026-11-19 Mesh 回传优化：已组网的有线漏收广播时，核对载波、掉线计数、桥和租约后，
 从 LAN 桥限时探测已配对主 AP；连续失败才回退，新接线仍走原配对检查。重连优先试本次
 开机中同一配对上次成功的频段。主 AP 拓扑显示从 AP 的回传方式和切换原因，并以当前

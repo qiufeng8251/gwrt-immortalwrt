@@ -186,6 +186,16 @@ get_status() {
 		local fw_rel=$(tr '\0' '\n' < "$npu_dt" 2>/dev/null | grep -m1 "rv32")
 		[ -n "$fw_rel" ] && npu_fw="/lib/firmware/$fw_rel"
 	fi
+	if [ -z "$npu_fw" ]; then
+		# Boards without the npu-mt7992/mt7996 dtsi (pure PON ONT) carry no
+		# firmware-name property; the driver then falls back to the per-SoC
+		# default binaries. Mirror that fallback so the version is not
+		# reported as Unknown.
+		case "$(airoha_soc)" in
+			an7583) npu_fw="/lib/firmware/airoha/an7583_npu_rv32.bin" ;;
+			en7581) npu_fw="/lib/firmware/airoha/en7581_npu_rv32.bin" ;;
+		esac
+	fi
 
 	local npu_ver="Unknown"
 	if [ -n "$npu_fw" ] && [ -f "$npu_fw" ]; then
@@ -209,7 +219,10 @@ get_status() {
 		npu_clock=$(cat /sys/kernel/debug/clk/npu/clk_rate 2>/dev/null || echo 0)
 	fi
 
-	local npu_cores=$(grep -c "airoha-npu-wdt" /proc/interrupts 2>/dev/null || echo 0)
+	local npu_cores=0
+	# grep -c prints 0 and exits 1 on no match; the || fallback only resets the
+	# variable so the captured value never becomes "0\n0".
+	npu_cores=$(grep -c "airoha-npu-wdt" /proc/interrupts 2>/dev/null) || npu_cores=0
 
 	local offload_bound=$(cat /sys/kernel/debug/ppe/bind 2>/dev/null | grep -c "^[0-9a-fA-F]")
 	local offload_total=$(cat /sys/kernel/debug/ppe/entries 2>/dev/null | grep -c "^[0-9a-fA-F]")
