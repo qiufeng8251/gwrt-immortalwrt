@@ -2,10 +2,15 @@ Subject: [PATCH] mtd: spinand: support TYFZA1 2025 NAND alternatives
 
 DS35Q2GBS (e5:b2) and FM25G02D (a1:f2) appear in OEM 11DXF30002.
 Use their own geometry, ECC status and OOB layouts. FM25G02D switches
-ECC at feature 90h; B0h remains the QE/OTP register. See docs/plain-2p5g.md.
+ECC at feature 90h; B0h remains the QE/OTP register.
 
---- /dev/null
-+++ b/drivers/mtd/nand/spi/dosilicon.c
+Rebased onto linux-6.18.62: upstream dropped etron/heyangtek spinand
+drivers and refactored fmsh.c down to FM25S01A only, so the FM25G02D
+support is re-expressed against the new table.
+
+---
+--- /dev/null	2026-11-19 20:12:38.707925278 +0800
++++ b/drivers/mtd/nand/spi/dosilicon.c	2026-11-19 22:20:46.825189215 +0800
 @@ -0,0 +1,89 @@
 +// SPDX-License-Identifier: GPL-2.0-only
 +/* DS35Q2GBS: DS35X2GBSXXX Rev.02, sections 3.11, 3.12 and 4.1. */
@@ -96,26 +101,26 @@ ECC at feature 90h; B0h remains the QE/OTP register. See docs/plain-2p5g.md.
 +	.nchips = ARRAY_SIZE(dosilicon_spinand_table),
 +	.ops = &dosilicon_spinand_manuf_ops,
 +};
---- a/drivers/mtd/nand/spi/Makefile
-+++ b/drivers/mtd/nand/spi/Makefile
+--- a/drivers/mtd/nand/spi/Makefile	2026-11-19 22:20:46.641200111 +0800
++++ b/drivers/mtd/nand/spi/Makefile	2026-11-19 22:20:46.825189215 +0800
 @@ -1,5 +1,5 @@
  # SPDX-License-Identifier: GPL-2.0
  spinand-objs := core.o otp.o
--spinand-objs += alliancememory.o ato.o esmt.o etron.o fmsh.o foresee.o gigadevice.o heyangtek.o
-+spinand-objs += alliancememory.o ato.o dosilicon.o esmt.o etron.o fmsh.o foresee.o gigadevice.o heyangtek.o
- spinand-objs += macronix.o micron.o paragon.o skyhigh.o toshiba.o winbond.o xtx.o
+-spinand-objs += alliancememory.o ato.o esmt.o fmsh.o foresee.o gigadevice.o macronix.o
++spinand-objs += alliancememory.o ato.o dosilicon.o esmt.o fmsh.o foresee.o gigadevice.o macronix.o
+ spinand-objs += micron.o paragon.o skyhigh.o toshiba.o winbond.o xtx.o
  obj-$(CONFIG_MTD_SPI_NAND) += spinand.o
---- a/include/linux/mtd/spinand.h
-+++ b/include/linux/mtd/spinand.h
-@@ -363,6 +363,7 @@
- extern const struct spinand_manufacturer esmt_8c_spinand_manufacturer;
- extern const struct spinand_manufacturer esmt_c8_spinand_manufacturer;
- extern const struct spinand_manufacturer etron_spinand_manufacturer;
+--- a/include/linux/mtd/spinand.h	2026-11-19 22:20:46.641200111 +0800
++++ b/include/linux/mtd/spinand.h	2026-11-19 22:20:46.829188978 +0800
+@@ -360,6 +360,7 @@
+ /* SPI NAND manufacturers */
+ extern const struct spinand_manufacturer alliancememory_spinand_manufacturer;
+ extern const struct spinand_manufacturer ato_spinand_manufacturer;
 +extern const struct spinand_manufacturer dosilicon_spinand_manufacturer;
+ extern const struct spinand_manufacturer esmt_c8_spinand_manufacturer;
  extern const struct spinand_manufacturer fmsh_spinand_manufacturer;
  extern const struct spinand_manufacturer foresee_spinand_manufacturer;
- extern const struct spinand_manufacturer gigadevice_spinand_manufacturer;
-@@ -418,6 +419,8 @@
+@@ -415,6 +416,8 @@
  #define SPINAND_HAS_PROG_PLANE_SELECT_BIT		BIT(2)
  #define SPINAND_HAS_READ_PLANE_SELECT_BIT		BIT(3)
  #define SPINAND_NO_RAW_ACCESS				BIT(4)
@@ -124,9 +129,9 @@ ECC at feature 90h; B0h remains the QE/OTP register. See docs/plain-2p5g.md.
  
  /**
   * struct spinand_ondie_ecc_conf - private SPI-NAND on-die ECC engine structure
---- a/drivers/mtd/nand/spi/core.c
-+++ b/drivers/mtd/nand/spi/core.c
-@@ -187,6 +187,18 @@
+--- a/drivers/mtd/nand/spi/core.c	2026-11-19 22:20:46.641200111 +0800
++++ b/drivers/mtd/nand/spi/core.c	2026-11-19 22:20:46.829188978 +0800
+@@ -205,6 +205,18 @@
  static int spinand_ecc_enable(struct spinand_device *spinand,
  			      bool enable)
  {
@@ -145,23 +150,23 @@ ECC at feature 90h; B0h remains the QE/OTP register. See docs/plain-2p5g.md.
  	return spinand_upd_cfg(spinand, CFG_ECC_ENABLE,
  			       enable ? CFG_ECC_ENABLE : 0);
  }
-@@ -1229,6 +1241,7 @@
- 	&esmt_8c_spinand_manufacturer,
- 	&esmt_c8_spinand_manufacturer,
- 	&etron_spinand_manufacturer,
+@@ -1245,6 +1257,7 @@
+ static const struct spinand_manufacturer *spinand_manufacturers[] = {
+ 	&alliancememory_spinand_manufacturer,
+ 	&ato_spinand_manufacturer,
 +	&dosilicon_spinand_manufacturer,
+ 	&esmt_c8_spinand_manufacturer,
  	&fmsh_spinand_manufacturer,
  	&foresee_spinand_manufacturer,
- 	&gigadevice_spinand_manufacturer,
---- a/drivers/mtd/nand/spi/fmsh.c
-+++ b/drivers/mtd/nand/spi/fmsh.c
-@@ -195,7 +195,58 @@
- 	.free = fm25s01bi3_ooblayout_free,
+--- a/drivers/mtd/nand/spi/fmsh.c	2026-11-19 22:20:46.641200111 +0800
++++ b/drivers/mtd/nand/spi/fmsh.c	2026-11-19 22:20:46.829188978 +0800
+@@ -50,7 +50,58 @@
+ 	.free = fm25s01a_ooblayout_free,
  };
  
 +/* FM25G02 (ID a1:f2) V0.4, sections 9 and 12; not the 8-bit FM25G02B. */
 +static int fm25g02d_ooblayout_ecc(struct mtd_info *mtd, int section,
-+				struct mtd_oob_region *region)
++				  struct mtd_oob_region *region)
 +{
 +	if (section > 3)
 +		return -ERANGE;
@@ -172,7 +177,7 @@ ECC at feature 90h; B0h remains the QE/OTP register. See docs/plain-2p5g.md.
 +}
 +
 +static int fm25g02d_ooblayout_free(struct mtd_info *mtd, int section,
-+				 struct mtd_oob_region *region)
++				   struct mtd_oob_region *region)
 +{
 +	if (section > 3)
 +		return -ERANGE;
@@ -211,6 +216,6 @@ ECC at feature 90h; B0h remains the QE/OTP register. See docs/plain-2p5g.md.
 +		     SPINAND_HAS_QE_BIT | SPINAND_ECC_REG_90,
 +		     SPINAND_ECCINFO(&fm25g02d_ooblayout,
 +				     fm25g02d_ecc_get_status)),
- 	SPINAND_INFO("FM25G01B",
- 		     SPINAND_ID(SPINAND_READID_METHOD_OPCODE_DUMMY, 0xd1),
- 		     NAND_MEMORG(1, 2048, 128, 64, 1024, 21, 1, 1, 1),
+ 	SPINAND_INFO("FM25S01A",
+ 		     SPINAND_ID(SPINAND_READID_METHOD_OPCODE_DUMMY, 0xE4),
+ 		     NAND_MEMORG(1, 2048, 64, 64, 1024, 20, 1, 1, 1),
