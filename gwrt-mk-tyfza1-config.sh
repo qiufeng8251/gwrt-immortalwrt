@@ -100,7 +100,8 @@ for p in \
 	tyfza1-pon-control \
 	tyfza1-storage \
 	luci-app-tyfza1-pon \
-	luci-app-pon-wan ; do
+	luci-app-pon-wan \
+	luci-app-pon-info ; do
 	add_pkg "$p"
 done
 
@@ -147,8 +148,44 @@ for p in \
 	add_pkg "$p"
 done
 
+echo "[tyfza1] 插件面板（只要 LuCI，不要本体）:"
+for p in \
+	luci-app-easytier \
+	luci-app-iptv \
+	smartdns \
+	luci-app-smartdns ; do
+	add_pkg "$p"
+done
+
+echo "[tyfza1] OAF 应用过滤:"
+for p in \
+	appfilter \
+	kmod-oaf \
+	luci-app-oaf ; do
+	add_pkg "$p"
+done
+
+# honk eBPF proxy (daeuniverse feed) with its LuCI page.  UI is Doona Lite,
+# preset in feeds/daeuniverse/honk/files/config.dae for this ONU only.
+echo "[tyfza1] honk (Doona Lite) + LuCI:"
+for p in \
+	honk \
+	luci-app-honk \
+	luci-lib-daeuniverse \
+	vmlinux-btf \
+	v2ray-geoip \
+	v2ray-geosite ; do
+	add_pkg "$p"
+done
+
 echo "[tyfza1] 主题（与整个项目同一版本）:"
 add_pkg luci-theme-gwrt
+
+# The dashboard shows the SoC, its clock and a CoreMark score.  CoreMark is
+# small and the theme renders it on the TYFZA1 overview, so keep it in the
+# image instead of leaving it to a manual post-flash install.
+echo "[tyfza1] CoreMark 跑分（仪表盘 SoC/主频/CPU 分数）:"
+add_pkg coremark
 
 echo "[tyfza1] 清除（后期设备自行安装，固件不带）:"
 for p in \
@@ -163,17 +200,12 @@ for p in \
 	docker-compose \
 	podman \
 	kmod-wireguard \
-	kmod-tun \
 	kmod-nft-tproxy \
 	kmod-inet-diag \
 	luci-app-bandix-plus \
 	bandix-plus \
-	coremark \
 	luci-app-ttyd \
 	ttyd \
-	appfilter \
-	kmod-oaf \
-	luci-app-oaf \
 	luci-theme-argon ; do
 	unset_pkg "$p"
 done
@@ -200,4 +232,12 @@ echo "==> 设备: $(grep -c "^CONFIG_TARGET_DEVICE_rtl9617c_generic_DEVICE_.*=y$
 echo "==> 无线: $(grep -E '^CONFIG_PACKAGE_(kmod-rtl-ax-ap|wpad-mbedtls|wifi-scripts)=y$' "$OUT" | tr '\n' ' ')"
 echo "==> PON:  $(grep -E '^CONFIG_PACKAGE_(tyfza1|luci-app-tyfza1|luci-app-pon)' "$OUT" | tr '\n' ' ')"
 echo "==> 主题: $(grep -E '^CONFIG_PACKAGE_luci-theme-gwrt=y$' "$OUT" || echo '缺失')"
+echo "==> honk: $(grep -E '^CONFIG_PACKAGE_(honk|luci-app-honk|vmlinux-btf)' "$OUT" | tr '\n' ' ')"
 echo "==> 冲突检查（应为空）: $(grep -E '^CONFIG_PACKAGE_(kmod-mac80211|kmod-cfg80211)=y$' "$OUT" || true)"
+cat <<'EOF'
+
+[hint] honk uses Doona Lite (feeds/daeuniverse/honk/files/config.dae).
+[hint] vmlinux-btf needs the kernel BTF blob at build time; pass:
+[hint]   make package/vmlinux-btf/compile VMLINUX_BTF_SRC=<vmlinux-with-btf> VMLINUX_BTF_VERSION=6.18.55
+[hint] before the full image build, otherwise that package fails.
+EOF

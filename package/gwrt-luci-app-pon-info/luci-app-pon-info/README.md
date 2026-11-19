@@ -40,6 +40,9 @@ OMCI 的 `session`/`auth`/`paths`/`error`、`pon0`/`pon-omci` 的 operstate、`s
 
 `/etc/poninfo/latest.json` 每次采样整体覆盖，用于页面"立即采样"与排障。
 
+`/etc/poninfo` 由采集器在写入前自行创建（`mkdir`），因此即使采样服务未启用，页面「立即采样」
+和命令行 `pon-info record` 也能正常落盘，不依赖 init.d 先建目录。
+
 ## 配置 `/etc/config/poninfo`
 
 ```

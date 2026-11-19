@@ -291,6 +291,14 @@ return view.extend({
 			]),
 			card('概览', table([
 				row('设备', fmt((status.device || {}).model) + ' / ' + fmt((status.device || {}).board)),
+				row('CPU', (function() {
+					var cpu = (status.device || {}).cpu || {};
+					var name = cpu.soc ? cpu.soc + '*' + (cpu.threads || '?') : '?';
+					var mhz = cpu.freq_khz ? (cpu.freq_khz >= 1000000
+						? (cpu.freq_khz / 1000000).toFixed(2).replace(/\.?0+$/, '') + ' GHz'
+						: Math.round(cpu.freq_khz / 1000) + ' MHz') : '?';
+					return name + '  ' + mhz;
+				})()),
 				row('固件', String((status.device || {}).release || '').split('\n').filter(function(l) {
 					return l.indexOf('DISTRIB_DESCRIPTION') === 0 || l.indexOf('DISTRIB_REVISION') === 0;
 				}).join('  ')),

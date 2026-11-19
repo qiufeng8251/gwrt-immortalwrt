@@ -4,7 +4,7 @@
 // 用法: pon-info json | record | history [N] | clear | show
 'use strict';
 
-import { readfile, writefile, rename, popen, glob } from 'fs';
+import { readfile, writefile, rename, popen, glob, mkdir } from 'fs';
 
 const STATE = '/etc/poninfo';
 const HISTORY = STATE + '/history.jsonl';
@@ -112,6 +112,62 @@ function shell(command) {
 	return output;
 }
 
+// 从系统实时读取 SoC 信息，不写死具体型号/核数/频率。
+// SoC 代号取 device-tree compatible 的芯片名；核数数 cpuinfo 的 processor 条目；
+// 频率优先 cpufreq，缺失时取 OPP 表最高频点（大端 64-bit，低 4 字节有效）。
+function cpu_info() {
+	let soc = null;
+	let compatible = readfile('/proc/device-tree/compatible');
+	if (compatible != null) {
+		// compatible 是 NUL 分隔；ucode 的 split 对 \0 语义不可靠，逐字节拆。
+		let entries = [];
+		let current = '';
+		for (let i = 0; i < length(compatible); i++) {
+			let ch = substr(compatible, i, 1);
+			if (ord(ch) == 0) {
+				push(entries, current);
+				current = '';
+			} else {
+				current += ch;
+			}
+		}
+		for (let entry in entries) {
+			let m = match(entry, /^[a-z0-9._-]+,(rtl[0-9][a-z0-9]*|mt[0-9][a-z0-9]*|ipq[0-9][a-z0-9]*|en[0-9][a-z0-9]*)$/);
+			if (m != null) {
+				soc = m[1];
+				break;
+			}
+		}
+	}
+
+	let threads = 0;
+	let cpuinfo = readfile('/proc/cpuinfo');
+	if (cpuinfo != null) {
+		for (let line in split(cpuinfo, /\n/))
+			if (match(line, /^processor/))
+				threads++;
+	}
+
+	let freq_khz = null;
+	let raw = readfile('/sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq');
+	if (raw != null)
+		freq_khz = integer(trim(raw));
+	if (freq_khz == null) {
+		let opp = readfile('/proc/device-tree/cpu@0/operating-points-v2/opp-hz');
+		if (opp != null && length(opp) >= 8) {
+			for (let i = 0; i + 7 < length(opp); i += 8) {
+				let hz = 0;
+				for (let j = i + 4; j < i + 8; j++)
+					hz = hz * 256 + ord(substr(opp, j, 1));
+				if (hz > 0 && (freq_khz == null || hz > freq_khz))
+					freq_khz = int(hz / 1000);
+			}
+		}
+	}
+
+	return { soc: soc, threads: threads, freq_khz: freq_khz };
+}
+
 function netdev(name) {
 	let base = '/sys/class/net/' + name + '/';
 	if (readfile(base + 'ifindex') == null)
@@ -217,7 +273,8 @@ function collect() {
 			model: value('/tmp/sysinfo/model'),
 			release: value('/etc/openwrt_release'),
 			uptime: value('/proc/uptime'),
-			kernel: value('/proc/version')
+			kernel: value('/proc/version'),
+			cpu: cpu_info()
 		},
 		config: {
 			pon_enabled: (pon.enabled ?? '1') == '1',
@@ -320,15 +377,23 @@ function history_lines() {
 	return out;
 }
 
+// 状态目录可能还不存在（服务未启用时页面手动采样），先确保它在。
+// mkdir 在目录已存在时返回 null 且不报错，因此无需先探测。
+function ensure_state_dir() {
+	mkdir(STATE);
+}
+
 function write_history(records) {
 	let text = '';
 	for (let record in records)
 		text += sprintf('%J', record) + '\n';
+	ensure_state_dir();
 	writefile(HISTORY + '.new', text);
 	rename(HISTORY + '.new', HISTORY);
 }
 
 function record() {
+	ensure_state_dir();
 	let full = collect();
 	let current = snapshot(full);
 	let settings = config_settings();
@@ -370,6 +435,7 @@ function history(limit) {
 }
 
 function clear_history() {
+	ensure_state_dir();
 	writefile(HISTORY, '');
 	return { cleared: true };
 }
@@ -379,7 +445,15 @@ function show() {
 	let i = full.identity, o = full.link.optical ?? {}, s = full.link.state ?? {};
 	let t = full.link.transceiver ?? {}, om = full.omci.runtime ?? {};
 	let b = full.backend;
+	let cpu = full.device.cpu ?? {};
+	let mhz = '?';
+	if (cpu.freq_khz != null) {
+		mhz = cpu.freq_khz >= 1000000
+			? sprintf('%.2f GHz', cpu.freq_khz / 1000000.0)
+			: sprintf('%d MHz', int(cpu.freq_khz / 1000));
+	}
 	print('设备      ' + (full.device.model ?? '?') + '  (' + (full.device.board ?? '?') + ')\n');
+	print('CPU       ' + ((cpu.soc ?? '?') + '*' + (cpu.threads ?? '?')) + '   ' + mhz + '\n');
 	print('PON 后端  ' + (b.device ?? '未发现 PON 平台设备') + '\n');
 	print('协议      ' + (i.mode ?? '?') + '   状态族 ' + (s.family ?? '?') + '\n');
 	print('SN        配置 ' + (i.serial_number ?? '-') + '   生效 ' + (i.serial_number_active ?? '-') + '   hex ' + (i.serial_number_hex ?? '-') + '\n');

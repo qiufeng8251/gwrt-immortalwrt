@@ -2583,13 +2583,61 @@ function ponStatusText(pon){
   if(reg.onu_state)return ponOnuLabel(reg.onu_state);
   return '\u7b49\u5f85\u8bfb\u53d6';
 }
+/* 光猫（TYFZA1）没有 ponctl，改用猫专用 luci.pon-info 的数据。
+ * 把它的字段映射成 ponctl schema_version=1 的形状，供既有卡片/面板复用。
+ * 换算口径与 PON 插件页面一致：SFF-8472 dBm=10*log10(raw/10000)、
+ * 温度=raw/256 °C、电压=raw/10000 V。 */
+function ponFromPonInfo(src){
+  if(!src||typeof src!=='object')return null;
+  var link=src.link||{},t=link.transceiver||{},o=link.optical||{},
+      sd=link.serdes||{},stt=link.state||{},ident=src.identity||{};
+  function num(v){v=Number(v);return isFinite(v)?v:null;}
+  function dbm(raw){raw=num(raw);return raw==null||raw<=0?null:10*Math.log10(raw/10000);}
+  var rx=dbm(t.rx_power_raw),tx=dbm(t.tx_power_raw);
+  var tv=num(t.temperature_raw),vv=num(t.voltage_raw);
+  var rxLos=String(o.rx_los!=null?o.rx_los:sd.rx_los)==='1';
+  var gearbox=String(sd.gearbox_ready||'')==='1';
+  var operational=!rxLos&&gearbox;
+  var mode=String(sd.mode||stt.family||'');
+  return {
+    schema_version:1,
+    line:{
+      active_mode:mode,configured_mode:mode,
+      lifecycle:operational?'operational':(rxLos?'wait-optical-signal':'wait-line-sync'),
+      optical_signal:!rxLos&&(rx!=null||tx!=null)
+    },
+    frontend:{
+      error:0,
+      rx_power_dbm:rx,tx_power_dbm:tx,
+      temperature_celsius:tv!=null?tv/256:null,
+      voltage_volts:vv!=null?vv/10000:null
+    },
+    registration:{
+      onu_id:ident.onu_id!=null?ident.onu_id:null,
+      onu_state:operational?'O5':null,
+      mpcp_state:operational?'registered':null
+    },
+    counters:{}
+  };
+}
+function fetchPonInfoFallback(force){
+  var job=force?rpcD('luci.pon-info','status',{}):rpcCached('ponInfoStatus',10000,'luci.pon-info','status',{});
+  return job.then(function(s){
+    if(!s||s.__rpcError!==undefined)return null;
+    var mapped=ponFromPonInfo(s);
+    if(!mapped)return null;
+    window._gwrtPon=JSON.stringify(mapped);
+    return mapped;
+  }).catch(function(){return null;});
+}
 function fetchPonStatus(force){
   var args={command:'/usr/sbin/ponctl',params:['--device','pon0','status','--json']};
   var job=force?rpcD('file','exec',args):rpcCached('ponStatus',10000,'file','exec',args);
   return job.then(function(r){
-    if(r&&r.stdout)window._gwrtPon=r.stdout;
-    return ponSnapshot();
-  }).catch(function(){return null;});
+    if(r&&r.stdout){window._gwrtPon=r.stdout;return ponSnapshot();}
+    /* ponctl 不可用（光猫）：回退到 luci.pon-info。 */
+    return fetchPonInfoFallback(force);
+  }).catch(function(){return fetchPonInfoFallback(force);});
 }
 function ponCardHtml(p,st){
   var now=Date.now(),stat=(st&&st.statistics)||{};
