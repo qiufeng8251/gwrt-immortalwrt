@@ -185,8 +185,8 @@ jobs:
           # mbedtls 3.6 + GCC 14 + musl fortify：aarch64 上 string.h 的
           # __always_inline memset 会报 target specific option mismatch。
           # 只对 mbedtls 关掉 FORTIFY（它自身已有边界检查），不影响其他包。
-          sed -i '1i PKG_FORTIFY_SOURCE:=0' feeds/packages/libs/mbedtls/Makefile
-          head -2 feeds/packages/libs/mbedtls/Makefile
+          sed -i '1i PKG_FORTIFY_SOURCE:=0' package/libs/mbedtls/Makefile
+          head -2 package/libs/mbedtls/Makefile
 
       - name: Generate TYFZA1 config
         env:
