@@ -232,6 +232,38 @@ wait
         self.assertEqual(self.events().count('service wifiroam restart'), 1)
         self.assertEqual(self.events().count('service rpcd reload'), 1)
 
+    def test_both_overlays_remove_stock_donation_page(self):
+        self.prepare_mesh()
+        shared = FILES / 'wifiroam'
+        v5 = self.base / 'usr/share/gwrt/wifiroam-v5'
+        stock_v5 = ROOT / 'package/gwrt-wifiroam-v5/files/usr/share/gwrt/wifiroam-v5'
+        assets = self.base / 'www/luci-static/resources/wifiroam'
+        views = assets.parent / 'view/wifiroam'
+        for d in (assets, views):
+            d.mkdir(parents=True)
+        target = self.base / 'usr/share/luci/menu.d/luci-app-wifiroam.json'
+        for name in ('menu.json', 'backhaul.js', 'backhaul-acl.json', 'topologyBackhaul.js'):
+            (self.base / 'usr/share/gwrt/wifiroam' / name).write_bytes((shared / name).read_bytes())
+        (v5 / 'menu.json').write_bytes((stock_v5 / 'menu.json').read_bytes())
+        for variant in ('v5', 'base'):
+            with self.subTest(variant=variant):
+                stock = assets / 'donate-qr.png'
+                old_view = views / 'donate.js'
+                old_cache = self.base / 'tmp/luci-indexcache.12345678.json'
+                for file in (stock, old_view, old_cache):
+                    file.touch()
+                if variant == 'base':
+                    (v5 / 'wifiroamd.uc').unlink()
+                result = self.run_file(FILES / '97_gwrt-wifiroam-defaults')
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertFalse(any(file.exists() for file in (stock, old_view, old_cache)))
+                routes = json.loads(target.read_text())
+                self.assertFalse(any('donate' in k for k in routes))
+                self.assertIn('admin/services/wifiroam/backhaul', routes)
+                self.assertEqual((views / 'backhaul.js').read_bytes(), (shared / 'backhaul.js').read_bytes())
+                self.assertEqual((assets / 'topologyBackhaul.js').read_bytes(),
+                                 (shared / 'topologyBackhaul.js').read_bytes())
+
     def test_user_disabled_mesh_not_started(self):
         values = self.prepare_mesh(enabled='0', role='sap')
         result = self.run_file(FILES / '97_gwrt-wifiroam-defaults')

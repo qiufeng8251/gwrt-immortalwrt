@@ -54,7 +54,9 @@ with tempfile.TemporaryDirectory(prefix='ss01-firstboot-') as tmp:
     (base / 'usr/share/gwrt/apk/luci-app-wifiroam-test.apk').touch()
     (base / 'usr/share/gwrt/apk/luci-i18n-wifiroam-zh-cn-test.apk').touch()
     for name in ('wifiroamd.uc', 'topology.js', 'clients.js', 'pairing.js',
-                 'settings.js', 'menu.json'):
+                 'settings.js', 'menu.json', 'mesh-state.uc', 'mesh-radio.uc',
+                 'mesh-fronthaul.uc', 'backhaul.js', 'backhaul-acl.json',
+                 'topologyBackhaul.js', 'wifiroam.css'):
         (base / 'usr/share/gwrt/wifiroam' / name).write_text('patched ' + name)
 
     for name in ('95_gwrt-wifi-defaults', '96_gwrt-preset-apk', '97_gwrt-wifiroam-defaults'):

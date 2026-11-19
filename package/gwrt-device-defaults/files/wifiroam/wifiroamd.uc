@@ -15,6 +15,9 @@ import * as socket from "socket";
 import * as fs from "fs";
 import * as uci from "uci";
 import { sha256 } from "digest";
+import * as mesh from "/usr/share/gwrt/wifiroam/mesh-state.uc";
+import * as meshRadio from "/usr/share/gwrt/wifiroam/mesh-radio.uc";
+import * as front from "/usr/share/gwrt/wifiroam/mesh-fronthaul.uc";
 
 // ---------------------------------------------------------------- constants
 const UDP_PORT = 50607;
@@ -386,10 +389,13 @@ function wireless_uplink() {
 }
 
 function detect_uplink() {
+	let phase = mesh.readPhase().mode;
 	let out = cmd_output("ip route show default 2>/dev/null");
 	let words = split(trim(split(out, "\n")[0] ?? ""), " ");
 	let gw = field_after(words, "via");
 	let dev = field_after(words, "dev");
+	if (state.cfg.role == "sap" && phase == "wired")
+		return { type: "wired", port: dev ?? "br-lan", gw };
 	let wireless = dev && (fs.access(`/sys/class/net/${dev}/wireless`) ||
 	                       index(dev, "wlan") == 0 || index(dev, "wl") == 0);
 	let wl = wireless_uplink();
@@ -430,25 +436,7 @@ function wifi_ifaces() {
 }
 
 // 主AP 下发用：用户 SSID + 密码（不含回传 SSID mesh-gwrt）
-function wifi_export() {
-	let out = [];
-	let cur = uci.cursor();
-	cur.load("wireless");
-	cur.foreach("wireless", "wifi-iface", function(s) {
-		if (s.mode && s.mode != "ap") return;
-		if (s.disabled == "1") return;
-		if (is_backhaul_sec(s[".name"])) return;   // bh 和 bh2 都不能当用户 SSID 下发
-		if ((s.ssid ?? "") == "") return;
-		push(out, {
-			ssid: s.ssid,
-			key: s.key ?? "",
-			encryption: s.encryption ?? "none",
-			band: cur.get("wireless", s.device, "band") ?? "?",
-			isolate: s.isolate ?? "0",
-		});
-	});
-	return out;
-}
+function wifi_export() { return front.settings(); }
 
 function self_info() {
 	return {
@@ -458,6 +446,7 @@ function self_info() {
 		role: state.cfg.role, uptime: self_uptime(),
 		ifaces: state.self.ifaces ?? {},
 		wifi: wifi_ifaces(), uplink: detect_uplink(),
+		backhaul: state.cfg.role == "sap" ? mesh.backhaulReport() : null,
 	};
 }
 
@@ -696,35 +685,33 @@ function udp_send(obj) {
 		udp_sock.send(payload, 0, { address: "255.255.255.255", port: UDP_PORT });
 }
 
-// 主路由要能回连：优先用默认路由的源地址（WAN/无线回传口的 IP），
-// 不能用 br-lan 的 192.168.3.3（主路由根本路由不到）
-function advertise_ip() {
-	let src = trim(cmd_output("ip -4 route get 1.1.1.1 2>/dev/null | sed -n 's/.* src \\([0-9.]*\\).*/\\1/p'"));
-	if (src != "" && src != "1.1.1.1") return src;
-	return state.self.ip;
+function refresh_self_addr() {
+	let a = mesh.localAddress(ubusc, state.cfg.role, mesh.readPhase().mode);
+	if (!a || !state.self) return;
+	state.self.ip = a.address;
+	state.bcast = lan_broadcast(a.address, a.mask ?? 24);
 }
 
 function send_hello() {
-	// 强制退出 AP（gwrt.mesh_apmode.enabled=0）时停止广播：
-	// 避免主AP 的自动配对又把它拉回组网状态
 	let gc = uci.cursor();
-	gc.load("gwrt");
-	if (gc.get("gwrt", "mesh_apmode", "enabled") == "0") return;
+	if (state.cfg.role != "cap" && gc.get("gwrt", "mesh_apmode", "enabled") == "0") return;
+	refresh_self_addr();
 	udp_send({
 		magic: MAGIC, ver: 1, role: state.cfg.role,
-		mac: state.self.mac, ip: advertise_ip(), lan_ip: state.self.ip,
+		mac: state.self.mac, ip: state.self.ip, lan_ip: state.self.ip,
 		name: state.self.name, model: state.self.model,
 		nonce: state.self.nonce,
-		thash: substr(sha256("wifiroam:" + state.cfg.token), 0, 16),
+		thash: mesh.pairingHash(state.cfg.token),
 		alias_ver: state.aliases.ver, ts: time(),
 	});
 }
 
 function udp_rx() {
 	while (true) {
-		let peer = {};
-		let data = udp_sock.recv(4096, 0, peer);
-		if (!data) break;
+		let pkt = mesh.receive(udp_sock);
+		if (!pkt) break;
+		let data = pkt.data;
+		let peer = pkt.address ?? {};
 		let msg;
 		try { msg = json(data); } catch (e) { continue; }
 		if (type(msg) != "object" || msg.magic != MAGIC) continue;
@@ -740,8 +727,9 @@ function udp_rx() {
 			continue;
 		}
 
-		let my_th = substr(sha256("wifiroam:" + state.cfg.token), 0, 16);
+		let my_th = mesh.pairingHash(state.cfg.token);
 		if (state.cfg.token == "" || msg.thash != my_th) continue; // foreign net
+		mesh.observeCap(pkt, msg, state.cfg, my_th);
 
 		let p = state.peers[mn] ??= { clients: null }; // null = 未收过 report，首轮 diff 抑制
 		p.mac = uc(msg.mac);
@@ -776,6 +764,7 @@ function setup_udp() {
 	if (!udp_sock) { log("udp create failed"); return; }
 	udp_sock.setopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, true);
 	udp_sock.setopt(socket.SOL_SOCKET, socket.SO_BROADCAST, true);
+	if (!mesh.enableIngress(udp_sock)) log("could not enable UDP ingress tracking");
 	if (!udp_sock.bind("0.0.0.0:" + UDP_PORT)) {
 		log("udp bind failed: " + socket.error());
 		udp_sock.close(); udp_sock = null;
@@ -853,6 +842,7 @@ function refresh_client_identity(c, mn, wired_peer, leases, neigh, names) {
 
 function build_topology() {
 	let nodes = [];
+	let now = clock(true)[0];
 	let self_mn = macnorm(state.self.mac);
 	let myclients = local_clients();
 
@@ -885,6 +875,7 @@ function build_topology() {
 			ip: p.info?.ip ?? p.ip, mac: p.mac ?? maccolon(mn),
 			parent: self_mn,
 			uplink: p.info?.uplink ?? null,
+			backhaul: mesh.peerBackhaul(state.cfg.role, p, now),
 			firmware: p.info?.firmware ?? null,
 			uptime: p.info?.uptime ?? null,
 			authed: !!p.authed,
@@ -917,11 +908,8 @@ function roam_md(ssid) { return substr(sha256("md:" + ssid), 0, 4); }
 function roam_key0(mac) { return substr(sha256(state.cfg.token + ":r0:" + macnorm(mac)), 0, 32); }
 function roam_key1(mac) { return substr(sha256(state.cfg.token + ":r1:" + macnorm(mac)), 0, 32); }
 
-function local_wireless_nat() {
-	if (state.cfg.role != "sap") return false;
-	let cur = uci.cursor(); cur.load("wireless");
-	return cur.get("wireless", BACKHAUL_SECTION, "network") == "wwan" &&
-	       cur.get("wireless", BACKHAUL_SECTION, "disabled") != "1";
+function wireless_relay() {
+	return state.cfg.role == "sap" && mesh.readPhase().mode == "wireless";
 }
 
 function member_list() {
@@ -934,25 +922,25 @@ function member_list() {
 }
 
 function apply_roam_local(roam, members, wifi_changed) {
-	let wireless_before = fs.readfile("/etc/config/wireless");
+	let wireless_before = mesh.wirelessVersion();
 	let cur = uci.cursor();
 	cur.load("wireless");
 	let touched = [];
 	let self_nasid = uc(macnorm(state.self.mac));
-	let local_nat = local_wireless_nat();
+
 
 	cur.foreach("wireless", "wifi-iface", function(s) {
 		if (s.mode && s.mode != "ap") return;
+		if (is_backhaul_sec(s[".name"]) || s.wifiroam_guest == "1") return;
 		let sid = s[".name"];
-		// 3-addr NAT 子AP 不在同一二层，不能启用跨网段 FT/K/V 漫游。
-		let in_group = !local_nat && roam.enabled && index(roam.ssids ?? [], s.ssid) >= 0;
+		let in_group = roam.enabled && index(roam.ssids ?? [], s.ssid) >= 0;
 
 		if (in_group) {
 			// R（802.11r）可单独关闭：关闭时移除全部 FT 相关键，只保留 K/V
-			if (roam.r_fast) {
+			if (roam.r_fast && (roam.ft_mode != "explicit" || !wireless_relay())) {
 				cur.set("wireless", sid, "ieee80211r", "1");
 				cur.set("wireless", sid, "mobility_domain", roam_md(s.ssid));
-				cur.set("wireless", sid, "ft_over_ds", roam.ft_over_ds ? "1" : "0");
+				cur.set("wireless", sid, "ft_over_ds", roam.ft_over_ds && !wireless_relay() ? "1" : "0");
 				cur.set("wireless", sid, "reassociation_deadline", "2000");
 				if (roam.ft_mode == "explicit") {
 					cur.set("wireless", sid, "ft_psk_generate_local", "0");
@@ -994,7 +982,7 @@ function apply_roam_local(roam, members, wifi_changed) {
 		}
 	});
 
-	cur.commit("wireless");
+	if (!mesh.writeConfig(cur, "wireless", state.cfg.role)) return { ok: false, error: "uci" };
 	state.roam_ver_applied = roam.config_ver ?? state.roam_ver_applied;
 	// 整份漫游配置落盘：SAP 的设置页读取本地 uci，只写 ver/enabled 会让
 	// 子 AP 显示与主 AP 不一致（SSID 组、FT 模式、k/v 开关等仍是默认值）
@@ -1029,7 +1017,7 @@ function apply_roam_local(roam, members, wifi_changed) {
 	}
 	if (dirty) wc.commit("wifiroam");
 	// 重连/重复推送只更新回执；实际无线配置改变时才重载，避免打断已有流量。
-	if (wifi_changed || wireless_before != fs.readfile("/etc/config/wireless"))
+	if (wifi_changed || wireless_before != mesh.wirelessVersion())
 		uloop.process("/sbin/wifi", [ "reload" ], null,
 			function(res) { log("wifi reload rc=" + res); });
 	push_event("roam_apply", "",
@@ -1039,57 +1027,7 @@ function apply_roam_local(roam, members, wifi_changed) {
 
 // 子AP：按频段套用主AP 的 SSID/密码（同一 ESS 才能无缝漫游）
 function apply_wifi_from_cap(list) {
-	if (type(list) != "array" || length(list) == 0)
-		return { ok: true, changed: 0 };
-	// 强制退出 AP 模式时忽略主AP 的 SSID/密码下发，保持路由模式自己的 SSID
-	let gc = uci.cursor();
-	gc.load("gwrt");
-	if (gc.get("gwrt", "mesh_apmode", "enabled") == "0")
-		return { ok: true, changed: 0 };
-	// 第一次同步前，把「路由模式」的无线配置存一份；
-	// 回退路由模式时用它恢复原 SSID/密码（否则子AP 一直广播主路由 SSID，回退后连不上）
-	if (!fs.access("/etc/gwrt-wireless-orig")) {
-		let raw = fs.readfile("/etc/config/wireless");
-		if (raw) fs.writefile("/etc/gwrt-wireless-orig", raw);
-	}
-	let by_band = {};
-	for (let w in list) {
-		if (!w || (w.ssid ?? "") == "") continue;
-		let b = w.band ?? "?";
-		if (!by_band[b]) by_band[b] = w;
-	}
-	let cur = uci.cursor();
-	cur.load("wireless");
-	let changed = 0;
-	cur.foreach("wireless", "wifi-iface", function(s) {
-		if (s.mode && s.mode != "ap") return;
-		if (is_backhaul_sec(s[".name"])) return;   // 隐藏回传 AP（bh/bh2）不是用户热点
-		let band = cur.get("wireless", s.device, "band") ?? "?";
-		let w = by_band[band];
-		if (!w) return;
-		let sid = s[".name"];
-		if ((s.ssid ?? "") != w.ssid) {
-			cur.set("wireless", sid, "ssid", w.ssid);
-			changed++;
-		}
-		if ((w.encryption ?? "") != "" && (s.encryption ?? "") != w.encryption) {
-			cur.set("wireless", sid, "encryption", w.encryption);
-			changed++;
-		}
-		if ((w.key ?? "") != "" && (s.key ?? "") != w.key) {
-			cur.set("wireless", sid, "key", w.key);
-			changed++;
-		}
-		if ((w.isolate ?? "0") != (s.isolate ?? "0")) {
-			cur.set("wireless", sid, "isolate", w.isolate);
-			changed++;
-		}
-	});
-	if (changed > 0) {
-		cur.commit("wireless");
-		log(sprintf("wifi sync from CAP: %d changes", changed));
-	}
-	return { ok: true, changed };
+	return front.sync(list, state.cfg.role);
 }
 
 // 本机实际落盘的 K/V/R：随 push_roam_config 回执上报，主AP可显示各 AP 生效状态
@@ -1123,229 +1061,21 @@ function wifi_radios() {
 	return out;
 }
 
-function pick_radio_by_band(band) {
-	let radios = wifi_radios();
-	for (let r in radios)
-		if (!r.disabled && r.band == band) return r.name;
-	return null;
-}
-
-function radio_running_channel(dev) {
-	let ch = 0;
-	let cur = uci.cursor();
-	cur.load("wireless");
-	let c = cur.get("wireless", dev, "channel") ?? "";
-	if (match(c, /^[0-9]+$/)) ch = int(c);
-	if (ch > 0) return ch;
-	// channel=auto：从运行中的 AP 接口读
-	let ws = ubusc.call("network.wireless", "status") ?? {};
-	for (let rname, r in ws) {
-		if (rname != dev) continue;
-		for (let ifc in r.interfaces ?? {}) {
-			if (!ifc.ifname) continue;
-			let info = cmd_output(sprintf("iw dev %s info 2>/dev/null", ifc.ifname));
-			let m = match(info, /channel ([0-9]+)/);
-			if (m) return int(m[1]);
-		}
-	}
-	return 0;
-}
-
-function pick_radio(prefer) {
-	let radios = wifi_radios();
-	for (let r in radios)
-		if (!r.disabled && r.name == prefer) return r.name;
-	for (let r in radios)
-		if (!r.disabled && r.band == "5g") return r.name;
-	for (let r in radios)
-		if (!r.disabled) return r.name;
-	return null;
-}
-
-// 上级 AP 的 MAC 若出现在以太网口上，说明当前仍有有线回程。
-// 此时不能把 STA 桥进 br-lan，否则会形成二层环路；只暂存配置待拔线后自动启用。
-function ethernet_uplink_port() {
-	let fdb = parse_fdb();
-	for (let mn, p in state.peers) {
-		let role = p.info?.role ?? p.role;
-		if (role != "cap") continue;
-		let port = fdb[mn];
-		if (port && index(port, "phy") != 0 && index(port, "wl") != 0 &&
-		    index(port, "vap") != 0 && index(port, "br") != 0)
-			return port;
-	}
-	return null;
-}
-
 function apply_backhaul_local(bh, role) {
-	let wireless_before = fs.readfile("/etc/config/wireless");
-	let cur = uci.cursor();
-	cur.load("wireless");
-	let exists = cur.get("wireless", BACKHAUL_SECTION) != null;
-	let band = bh.band ?? "auto";
-	if (role != "cap") {
-		// 子AP：运行期降级优先（state.bh_band=2g），否则显式 5g 才用 5G。
-		// 默认 2.4G：与 gwrt-mesh-apmode 的默认一致（两处代码抢写同一段会反复重配），
-		// 且 2.4G 穿透好、信道天然对齐，无线回传更稳。
-		if (state.bh_band) band = state.bh_band;
-		else band = (band == "5g") ? "5g" : "2g";
-	}
-
-	if (bh.enabled && (bh.ssid ?? "") != "" && (bh.key ?? "") != "") {
-		if (role == "cap") {
-			// 主AP：5G + 2.4G 都开隐藏回传 AP，子AP 可任选（5G 优先，2.4G 兜底）
-			let r5 = pick_radio_by_band("5g");
-			let r2 = pick_radio_by_band("2g");
-			let ch = r5 ? radio_running_channel(r5) : 0;
-			let ch2 = r2 ? radio_running_channel(r2) : 0;
-			for (let spec in [ [BACKHAUL_SECTION, r5], [BACKHAUL_SECTION + "2", r2] ]) {
-				let sec = spec[0], dev = spec[1];
-				if (!dev) {
-					if (cur.get("wireless", sec) != null) cur.delete("wireless", sec);
-					continue;
-				}
-				if (cur.get("wireless", sec) == null)
-					cur.set("wireless", sec, "wifi-iface");
-				cur.set("wireless", sec, "device", dev);
-				cur.set("wireless", sec, "mode", "ap");
-				cur.set("wireless", sec, "ssid", bh.ssid);
-				cur.set("wireless", sec, "encryption", "psk2+ccmp");
-				cur.set("wireless", sec, "key", bh.key);
-				cur.set("wireless", sec, "network", "lan");
-				cur.set("wireless", sec, "wds", "0");
-				cur.set("wireless", sec, "hidden", "1");
-				cur.set("wireless", sec, "disabled", "0");
-			}
-			let wc0 = uci.cursor(); wc0.load("wifiroam");
-			wc0.set("wifiroam", "backhaul", "channel", "" + ch);
-			// 2.4G 回传也要告诉子AP 本机 2.4G 信道：AP+STA 共用射频，
-			// 子AP 的 2.4G 热点不在同一信道时 STA 根本起不来
-			wc0.set("wifiroam", "backhaul", "channel2g", "" + ch2);
-			wc0.commit("wifiroam");
-			bh.channel = ch;
-			log(sprintf("backhaul APs: 5g=%s ch=%d, 2g=%s", r5 ?? "-", ch, r2 ?? "-"));
-		} else {
-			// 子AP：按 band 选射频；5G 时把本机 5G 热点信道对齐主AP
-			let dev = (band == "2g") ? pick_radio_by_band("2g") : pick_radio_by_band("5g");
-			if (!dev) dev = pick_radio_by_band("2g");
-			if (!dev) return { ok: false, error: "no_radio" };
-			let wired = ethernet_uplink_port();
-			if (band != "2g" && (bh.channel ?? 0) > 0) {
-				let curch = int(cur.get("wireless", dev, "channel") ?? "0");
-				if (curch != bh.channel) {
-					cur.set("wireless", dev, "channel", "" + bh.channel);
-					cur.set("wireless", dev, "htmode", "HE80");
-					log(sprintf("align %s to channel %d", dev, bh.channel));
-				}
-			}
-			// 2.4G 回传：AP+STA 共用同一个射频，本机 2.4G 热点必须和主AP 同信道，
-			// 否则 STA 起不来（主AP 把 2.4G 改成 6/11 时就会碰）
-			if (band == "2g" && (bh.channel2g ?? 0) > 0 && bh.channel2g <= 14) {
-				let curch2 = int(cur.get("wireless", dev, "channel") ?? "0");
-				if (curch2 != bh.channel2g) {
-					cur.set("wireless", dev, "channel", "" + bh.channel2g);
-					log(sprintf("align %s to 2g channel %d", dev, bh.channel2g));
-				}
-			}
-			if (cur.get("wireless", BACKHAUL_SECTION) == null)
-				cur.set("wireless", BACKHAUL_SECTION, "wifi-iface");
-			cur.set("wireless", BACKHAUL_SECTION, "device", dev);
-			cur.set("wireless", BACKHAUL_SECTION, "mode", "sta");
-			cur.set("wireless", BACKHAUL_SECTION, "ssid", bh.ssid);
-			cur.set("wireless", BACKHAUL_SECTION, "encryption", "psk2+ccmp");
-			cur.set("wireless", BACKHAUL_SECTION, "key", bh.key);
-			cur.set("wireless", BACKHAUL_SECTION, "network", wired ? "lan" : "wwan");
-			// 3-addr（wds=0）：4-addr 在 JDCloud 主AP 上四步握手容易超时
-			// （子AP 侧还会被 apmode 写成 wds=0，两边不一致时 4WAY_HANDSHAKE_TIMEOUT）
-			cur.set("wireless", BACKHAUL_SECTION, "wds", "0");
-			cur.delete("wireless", BACKHAUL_SECTION, "hidden");
-			cur.set("wireless", BACKHAUL_SECTION, "disabled",
-				wired ? "1" : "0");
-			if (cur.get("wireless", BACKHAUL_SECTION + "2") != null)
-				cur.delete("wireless", BACKHAUL_SECTION + "2");
-		}
-	} else {
-		if (exists) cur.delete("wireless", BACKHAUL_SECTION);
-		if (cur.get("wireless", BACKHAUL_SECTION + "2") != null)
-			cur.delete("wireless", BACKHAUL_SECTION + "2");
-	}
-	cur.commit("wireless");
-
-	let ver = bh.config_ver ?? 0;
-	let wc = uci.cursor();
-	wc.load("wifiroam");
-	wc.set("wifiroam", "backhaul", "enabled", bh.enabled ? "1" : "0");
-	wc.set("wifiroam", "backhaul", "ssid", bh.ssid ?? BACKHAUL_DEFAULT_SSID);
-	wc.set("wifiroam", "backhaul", "key", bh.key ?? "");
-	wc.set("wifiroam", "backhaul", "device", bh.device ?? "");
-	wc.set("wifiroam", "backhaul", "channel", "" + (bh.channel ?? 0));
-	// 只有当对方真的带了 channel2g 才写（老版本主AP 推送里没这个字段，别把本机已有值抹成 0）
-	if (bh.channel2g != null)
-		wc.set("wifiroam", "backhaul", "channel2g", "" + bh.channel2g);
-	wc.set("wifiroam", "backhaul", "config_ver", "" + ver);
-	wc.commit("wifiroam");
-	state.backhaul_ver_applied = ver;
-
-	if (wireless_before != fs.readfile("/etc/config/wireless"))
-		uloop.process("/sbin/wifi", [ "reload" ], null,
-			function(res) { log("backhaul wifi reload rc=" + res); });
-	push_event("backhaul_apply", "",
-		sprintf("ver=%d %s band=%s", ver, bh.enabled ? "wireless" : "off", band));
-	return { ok: true, ver };
+	let result = role == "cap" ?
+		meshRadio.applyCap(bh, ubusc, function() {
+			uloop.process("/sbin/wifi", [ "reload" ], null, function(rc) { log("backhaul wifi reload rc=" + rc); });
+		}) : mesh.saveBackhaul(bh);
+	if (result.ok) state.backhaul_ver_applied = result.ver;
+	return result;
 }
 
-// SAP 侧：有线/无线回程互斥。网线在位时 STA 保持 disabled，拔线后自动启用；
-// 重新插回网线则暂停 STA，避免二层环路。
-function backhaul_tick() {
-	if (state.cfg.role != "sap") return;
-	let bh = current_backhaul_cfg();
-	if (!bh.enabled) return;
-	let cur = uci.cursor();
-	cur.load("wireless");
-	if (cur.get("wireless", BACKHAUL_SECTION) == null) return;
-	let wired = ethernet_uplink_port();
-	let want = wired ? "1" : "0";
-	if ((cur.get("wireless", BACKHAUL_SECTION, "disabled") ?? "0") != want) {
-		cur.set("wireless", BACKHAUL_SECTION, "disabled", want);
-		cur.commit("wireless");
-		push_event("backhaul_link", "",
-			want == "1" ? "wired uplink detected, wireless STA paused"
-			            : "cable removed, wireless backhaul enabled");
-		uloop.process("/sbin/wifi", [ "reload" ], null,
-			function(res) { log("backhaul switch rc=" + res); });
-		state.bh_fail = 0;
-		return;
-	}
-	if (wired) return;
-
-	// 无线回传：5G 连续 60s 没连上 -> 降级 2.4G（只在本会话内，重启后重试 5G）
-	let band = state.bh_band ?? ((bh.band == "2g") ? "2g" : "5g");
-	if (band == "2g") return;
-	let ws = ubusc.call("network.wireless", "status") ?? {};
-	let ifn = null;
-	for (let rname, r in ws)
-		for (let ifc in r.interfaces ?? {})
-			if (ifc.section == BACKHAUL_SECTION) ifn = ifc.ifname;
-	if (!ifn) return;
-	let link = cmd_output(sprintf("iw dev %s link 2>/dev/null", ifn));
-	if (index(link, "Not connected") < 0 && index(link, "Connected to") >= 0) {
-		state.bh_fail = 0;
-		return;
-	}
-	state.bh_fail = (state.bh_fail ?? 0) + 1;
-	if (state.bh_fail >= 6) {
-		log("5G backhaul not connected for 60s, falling back to 2.4G");
-		state.bh_band = "2g";
-		state.bh_fail = 0;
-		// 持久化频段，apmode 服务按 uci band 重建回传
-		let wcb = uci.cursor();
-		wcb.load("wifiroam");
-		wcb.set("wifiroam", "backhaul", "band", "2g");
-		wcb.commit("wifiroam");
-		apply_backhaul_local(current_backhaul_cfg(), "sap");
-		push_event("backhaul_fallback", "", "5g -> 2g");
-	}
+function reconcile_cap_backhaul() {
+	if (state.cfg.role != "cap") return;
+	let result = apply_backhaul_local(current_backhaul_cfg(), "cap");
+	if (!result.ok) log("CAP backhaul configuration failed: " + result.error);
 }
+
 
 // --------------------------------------------------------------- prechecks
 function ssid_groups() {
@@ -1506,6 +1236,10 @@ function sap_rx(req) {
 
 	switch (req.type) {
 	case "push_roam_config": {
+		if (mesh.managed() && !mesh.ready(mesh.readPhase().mode)) {
+			req.reply({ ok: false, error: "link_pending" });
+			break;
+		}
 		let w = apply_wifi_from_cap(req.args.wifi ?? []);
 		let r = apply_roam_local(req.args.roam, req.args.members ?? [], w.changed);
 		req.reply({ ok: r.ok, ver: r.ver, wifi: w.changed,
@@ -1581,6 +1315,17 @@ function sap_connect(cap_ip) {
 
 function sap_tick() {
 	if (state.cfg.role != "sap") return;
+	if (mesh.managed()) {
+		let phase = mesh.readPhase();
+		let current = mesh.ready(phase.mode) ? phase.mode + ":" + phase.ip + ":" + phase.since : null;
+		if (current != state.mesh_session) {
+			state.mesh_session = current;
+			state.roam_ver_applied = -1;
+			sap_disconnect();
+		}
+		if (!current) return;
+		refresh_self_addr();
+	}
 	if (state.link?.authed) {
 		// 心跳看门狗：ucode 通道可能感知不到对端死亡（CLOSE_WAIT 半开），
 		// 以 report_status 回执刷新 last_pong，超时主动断开重连
@@ -1659,6 +1404,10 @@ function srv_rx(conn, req) {
 				req.reply({ ok: false, error: "bad_nonce" });
 				return 0;
 			}
+			if (type(args.backhaul) == "object" && !mesh.saveBackhaul(args.backhaul).ok) {
+				req.reply({ ok: false, error: "backhaul_config" });
+				return 0;
+			}
 			state.cfg.token = args.token;
 			state.cfg.cap_ip = args.cap_ip ?? "";
 			state.cfg.role = "sap";
@@ -1708,7 +1457,7 @@ function srv_rx(conn, req) {
 			     (args.roam_sig && args.roam_sig != rsig)))
 				push_roam_to(mn);
 			let bh = current_backhaul_cfg();
-			if (state.cfg.role == "cap" && bh.enabled &&
+			if (state.cfg.role == "cap" &&
 			    (args.backhaul_ver ?? -1) < bh.config_ver)
 				push_backhaul_to(mn);
 			return 0;
@@ -1720,7 +1469,12 @@ function srv_rx(conn, req) {
 	let mn = macnorm(conn.mac);
 	switch (req.type) {
 	case "report_status": {
-		let p = state.peers[mn] ??= { clients: null };
+		let p = state.peers[mn];
+		if (p?.conn != conn) {
+			req.reply({ ok: false, error: "superseded" });
+			return 0;
+		}
+		conn.reported_at = clock(true)[0];
 		let prev = p.clients;
 		p.info = args.info;
 		p.clients = args.clients ?? {};
@@ -1740,7 +1494,7 @@ function srv_rx(conn, req) {
 		    (p.roam_sig != "" && p.roam_sig != roam_sig(roam)))
 			push_roam_to(mn);
 		let bh = current_backhaul_cfg();
-		if (bh.enabled && p.backhaul_ver < bh.config_ver)
+		if (p.backhaul_ver < bh.config_ver)
 			push_backhaul_to(mn);
 		req.reply({ ok: true, alias_ver: state.aliases.ver,
 		            roam_ver: roam.config_ver, backhaul_ver: bh.config_ver,
@@ -1784,7 +1538,7 @@ function srv_accept() {
 		let addr = {};
 		let cs = tcp_srv.accept(addr);
 		if (!cs) break;
-		let conn = { sock: cs, authed: false, nonce: randhex(16) };
+		let conn = { sock: cs, address: addr.address, authed: false, nonce: randhex(16) };
 		conn.chan = libubus.open_channel(
 			cs,
 			function(req) { return srv_rx(conn, req); },
@@ -1942,9 +1696,18 @@ function find_client(mn) {
 }
 
 let api_obj = {
+	mesh_policy: {
+		args: { ubus_rpc_session: "" },
+		call: function() { return mesh.getPolicy(); },
+	},
+	set_mesh_policy: {
+		args: { ubus_rpc_session: "", search_seconds: 0, router_seconds: 0 },
+		call: function(req) { return mesh.setPolicy(req.args); },
+	},
 	status: {
 		args: { ubus_rpc_session: "" },
 		call: function(req) {
+			refresh_self_addr();
 			let online = 0, nclients = 0;
 			for (let mn, p in state.peers) {
 				if (p.authed) online++;
@@ -1967,6 +1730,7 @@ let api_obj = {
 				version: DAEMON_VERSION,
 				daemon_started: daemon_started,
 				kvr: applied_kvr(current_roam_cfg().ssids),
+				mesh_mode: mesh.readPhase().mode,
 				role: state.cfg.role, name: state.self.name,
 				mac: state.self.mac, ip: state.self.ip,
 				cap_ip: state.cfg.cap_ip != "" ? state.cfg.cap_ip : state.cap_learned,
@@ -2037,6 +1801,7 @@ let api_obj = {
 			}
 			save_config();
 			reconfigure();
+			reconcile_cap_backhaul();
 			return { ok: true, role: r };
 		},
 	},
@@ -2211,6 +1976,7 @@ let api_obj = {
 								data: {
 									token: state.cfg.token,
 									cap_ip: state.self.ip,
+									backhaul: current_backhaul_cfg(),
 									nonce_echo: d.nonce,
 								},
 								data_cb: function(m) {
@@ -2299,8 +2065,9 @@ function steer_has_target(ssid, now) {
 }
 
 function steer_tick() {
+	if (state.cfg.role == "sap" && mesh.managed() && !mesh.ready(mesh.readPhase().mode)) return;
 	if (state.cfg.role == "unconfigured") return;
-	if (local_wireless_nat()) return;
+	if (wireless_relay()) return;
 	let roam = current_roam_cfg();
 	if (!roam.enabled || !roam.v_bss_transition) return;
 	let threshold = roam.rssi_threshold;
@@ -2353,6 +2120,7 @@ reconfigure = function() {
 	sap_disconnect();
 	state.peers = {};
 	state.cap_learned = null;
+	state.mesh_session = null;
 	state.prev_clients = null;
 	state.wired_seen = {};
 	state.prev_owner = null;
@@ -2377,6 +2145,7 @@ function main() {
 
 	setup_udp();
 	setup_tcp();
+	reconcile_cap_backhaul();
 
 	ubusc.publish("wifiroam", api_obj);
 
@@ -2384,7 +2153,6 @@ function main() {
 	uloop.interval(TICK_INTERVAL, sap_tick);
 	uloop.interval(TICK_INTERVAL, sap_report);
 	uloop.interval(TICK_INTERVAL, expire_tick);
-	uloop.interval(TICK_INTERVAL, backhaul_tick);
 	uloop.interval(TICK_INTERVAL, steer_tick);
 	uloop.interval(TICK_INTERVAL, function() {
 		if (state.cfg.role != "cap") return;

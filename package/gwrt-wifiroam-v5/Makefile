@@ -14,7 +14,7 @@ include $(TOPDIR)/rules.mk
 
 PKG_NAME:=gwrt-wifiroam-v5
 PKG_VERSION:=0.261115
-PKG_RELEASE:=1
+PKG_RELEASE:=3
 PKG_LICENSE:=GPL-2.0-or-later
 
 include $(INCLUDE_DIR)/package.mk
@@ -23,7 +23,7 @@ define Package/gwrt-wifiroam-v5
   SECTION:=net
   CATEGORY:=Network
   TITLE:=GWRT wifiroam v5 overlay (daemon + UI + SNI DPI helper)
-  DEPENDS:=+kmod-nfnetlink-queue +libnetfilter-queue +libmnl +libnfnetlink
+  DEPENDS:=+gwrt-device-defaults +gwrt-mesh-apmode +kmod-nfnetlink-queue +libnetfilter-queue +libmnl +libnfnetlink
 endef
 
 define Package/gwrt-wifiroam-v5/description

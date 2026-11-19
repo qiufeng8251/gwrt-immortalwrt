@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 #include "rtl9617c-tyfza1-xram-lan.dts"
 
-/ { model = "Tianyi TYFZA1 (native DMA TX bring-up)"; };
+/ { model = "TYFZA1"; };
 
 &{/soc/ethernet@4f4300000} {
 	reg = <4 0xf4300000 0 0x10000>, <0 0xf4500000 0 0x2000>,

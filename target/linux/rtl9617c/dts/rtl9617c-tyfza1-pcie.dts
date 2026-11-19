@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 #include "rtl9617c-tyfza1-pon-status.dts"
 
-/ { model = "Tianyi TYFZA1 (native PON/PCIe bring-up)"; };
+/ { model = "TYFZA1"; };
 
 &{/reserved-memory} {
  /* PE ATU shadows these RAM addresses with code or MMIO. Keep skb and

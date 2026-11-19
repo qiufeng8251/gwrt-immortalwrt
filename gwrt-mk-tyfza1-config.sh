@@ -132,12 +132,15 @@ for p in \
 	add_pkg "$p"
 done
 
-echo "[tyfza1] GWRT mesh 组网（与 an7581 一致）:"
+# mesh 四件套与 an7581 一致；额外带 gwrt-wifiroam-v5 覆盖层（mesh 优化：
+# v5 守护进程 + 拓扑/客户端页面 + NFQUEUE 应用识别），由 97 默认值激活。
+echo "[tyfza1] GWRT mesh 组网（四件套 + wifiroam v5 覆盖层）:"
 for p in \
 	gwrt-device-defaults \
 	gwrt-mesh-led \
 	gwrt-mesh-apmode \
-	gwrt-agent ; do
+	gwrt-agent \
+	gwrt-wifiroam-v5 ; do
 	add_pkg "$p"
 done
 

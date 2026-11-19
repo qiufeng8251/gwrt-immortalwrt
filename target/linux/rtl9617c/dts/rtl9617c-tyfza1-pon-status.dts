@@ -2,7 +2,7 @@
 #include "rtl9617c-tyfza1-ni.dts"
 #include <dt-bindings/gpio/gpio.h>
 
-/ { model = "Tianyi TYFZA1 (native NI/PON bring-up)"; };
+/ { model = "TYFZA1"; };
 
 &i2c0 {
 	status = "okay";

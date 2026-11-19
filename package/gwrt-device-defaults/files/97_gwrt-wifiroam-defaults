@@ -14,7 +14,9 @@ if [ "$BOARD" = 'jdcloud,re-ss-01' ]; then
 	[ -f /etc/config/wifiroam ] && [ -d /usr/share/wifiroam ] && \
 		[ -x /etc/init.d/wifiroam ] && [ -x /etc/init.d/gwrt-wifiroam-autopair ] && \
 		[ -d "$VIEW" ] && [ -f /usr/share/luci/menu.d/luci-app-wifiroam.json ] || exit 1
-	for f in wifiroamd.uc topology.js clients.js pairing.js settings.js menu.json; do
+	for f in wifiroamd.uc topology.js clients.js pairing.js settings.js menu.json \
+		mesh-state.uc mesh-radio.uc mesh-fronthaul.uc backhaul.js backhaul-acl.json \
+		topologyBackhaul.js wifiroam.css; do
 		[ -f "$SRC/$f" ] || exit 1
 	done
 	# 95 is the readiness barrier; keep the same check when 97 is retried alone.
@@ -40,7 +42,12 @@ fi
 copy_changed() {
 	[ -f "$1" ] || return 0
 	cmp -s "$1" "$2" && return 0
-	mkdir -p "${2%/*}" && cp -f "$1" "$2" || return 1
+	local tmp
+	tmp="$2.gwrt-new"
+	mkdir -p "${2%/*}" && cp -f "$1" "$tmp" && mv -f "$tmp" "$2" || {
+		rm -f "$tmp"
+		return 1
+	}
 }
 
 # Select the final overlay before copying; never install the old daemon only
@@ -51,7 +58,9 @@ if [ -d /usr/share/wifiroam ]; then
 	copy_changed "$DAEMON" /usr/share/wifiroam/wifiroamd.uc || exit 1
 fi
 if [ -d "$VIEW" ]; then
-	for f in topology.js clients.js pairing.js settings.js advanced.js; do
+	[ -f "$SRC/topologyBackhaul.js" ] || exit 1
+	copy_changed "$SRC/topologyBackhaul.js" /www/luci-static/resources/wifiroam/topologyBackhaul.js || exit 1
+	for f in topology.js clients.js pairing.js settings.js advanced.js backhaul.js; do
 		file="$SRC/$f"
 		[ ! -f "$V5/views/$f" ] || file="$V5/views/$f"
 		copy_changed "$file" "$VIEW/$f" || exit 1
@@ -67,8 +76,12 @@ if [ -f "$V5/wifiroamd.uc" ]; then
 	fi
 	copy_changed "$V5/acl.json" /usr/share/rpcd/acl.d/luci-app-wifiroam.json || exit 1
 	copy_changed "$V5/wifiroam.zh-cn.lmo" /usr/lib/lua/luci/i18n/wifiroam.zh-cn.lmo || exit 1
+else
+	copy_changed "$SRC/wifiroam.css" /www/luci-static/resources/wifiroam/wifiroam.css || exit 1
 fi
-rm -f /tmp/luci-indexcache
+copy_changed "$SRC/backhaul-acl.json" /usr/share/rpcd/acl.d/luci-app-wifiroam-mesh.json || exit 1
+rm -f /www/luci-static/resources/wifiroam/donate-qr.png \
+	"$VIEW/donate.js" /tmp/luci-indexcache /tmp/luci-indexcache.*.json || exit 1
 
 set_missing() {
 	uci -q get "$1" >/dev/null 2>&1 && return 0
@@ -175,7 +188,7 @@ if [ -f /etc/config/wifiroam ]; then
 fi
 
 # ACL changes need a reload only if rpcd is already running.
-if [ -f "$V5/acl.json" ] && [ -x /etc/init.d/rpcd ] && \
+if [ -x /etc/init.d/rpcd ] && \
    /etc/init.d/rpcd running >/dev/null 2>&1; then
 	/etc/init.d/rpcd reload >/dev/null 2>&1 || exit 1
 fi

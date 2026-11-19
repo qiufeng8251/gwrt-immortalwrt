@@ -16,6 +16,54 @@
 
 ## 1. 构建与刷机
 
+2026-11-19 Mesh 回传优化：已组网的有线漏收广播时，核对载波、掉线计数、桥和租约后，
+从 LAN 桥限时探测已配对主 AP；连续失败才回退，新接线仍走原配对检查。重连优先试本次
+开机中同一配对上次成功的频段。主 AP 拓扑显示从 AP 的回传方式和切换原因，并以当前
+已认证连接的管理 IPv4 打开 LuCI。保留隐藏 SSID `mesh-gwrt` 及 120/60 秒默认窗口。
+验证和本次单独回滚见 `docs/WORKLOG-20261119-mesh-optimization.md`。
+
+2026-11-19 无线漫游回传更新：旧版/v5 去打赏，回传探测、切换、无线和配置恢复拆成独立模块。
+从 AP 确认 WAN 通往已配对主 AP 后优先走有线，拔线后确认脱桥再转无线；两路断开时
+默认搜索 120 秒、恢复原路由 60 秒并循环，两段时间可在 LuCI 调整，配对保留。
+状态、首启、目标 ucode、桌面/手机设置页及双回传隔离 IPv4/DHCP/管理路径验证见
+`docs/WORKLOG-20261119-mesh-backhaul.md`；未编译固件或上机，实机无线和无线 IPv6 待验证。
+
+2026-11-18 SS-01 `.3.3` 首页 WAN 曲线恢复：固件 `261118-04/671b86b`、主题 r123，
+Bandix 只监控 `br-lan` 导致双栈无样本；已保留 LAN 并追加 `wan`，仅重启 Bandix。
+两协议曲线在桌面/手机显示并更新，累计继续增长；统计进程及 boot ID 不变。未改主题、
+固件默认或其它设备。备份和回滚见 `docs/WORKLOG-20261118-ss01-wan-curve.md`。
+
+2026-11-18 GWRT 主题 r125 登录入口优化：登录表单取消单独“登录”按钮和旧的
+登录前切换链接，将 GWRT/原生作为两个直接提交按钮。GWRT 走当前管理入口，原生
+按钮提交同一表单到 81/444，成功后由 LuCI 直接进入目标页面。两份源码和桌面/手机/
+路由专项回归通过；`.9.9` 热更新后实机登录页与目标地址验证通过，boot ID 不变，
+未发送凭据；`.8.8` SSH 认证不可用，未更新。未编译/推送/刷机/重启。
+实机备份 `/root/gwrt-backups/20261118-theme-r125-login-before/`；详见
+`docs/WORKLOG-20261118-gwrt-theme-r125-login.md`。
+
+2026-11-18 GWRT 主题 r124：修正 r123 顶栏今天/周期/总量未高亮，流量值接入
+原有正常绿色/未知灰色状态；陈旧数据保留数值，恢复后重新高亮。源码双副本六文件
+SHA 一致，相关主题/安全回归通过；`.9.9` 六文件热更新及桌面/手机浏览器通过，
+导航仍 72px、无横向溢出，统计服务/PID 与 boot ID 未变，累计继续增加。
+仅 reload uhttpd；`.8.8` 因当前 SSH 凭据不可用未更新，仍为 r123。
+未改统计持久化/APP 轮询，未构建/推送/刷机/重启路由器。备份
+`/root/gwrt-backups/20261118-theme-r124-highlight-before/`；详见
+`docs/WORKLOG-20261118-gwrt-theme-r124-traffic-highlight.md`。
+
+2026-11-18 GWRT 主题 r123：按用户最新要求，以固定汇总替代 r122 日明细；
+`/etc/gwrt/traffic-daily.json` schema v3 仅保留累计/当前日周月年与计数基线，
+每 1800 秒原子替换并 sync，首次/迁移可立即写入，服务重启不强制提前写盘。
+两台文件约 1 KB，实测位于内置 eMMC F2FS overlay；不随天数增加明细。
+复用 wifiroam v5 产品图，CS-02/GWRT2 均为京东云 AX6600，SS-01 为 AX1800Pro；
+主路由/AP/可匹配接入设备均接入，未知或缺图退回 SVG，图片限 40px 保持紧凑。
+双栈同图透明背景，今天/周期/总量移到导航；35 个源码/测试文件 SHA 与最终候选一致，
+55 项流量及主题/Mesh 相关回归、两台桌面/手机浏览器通过；`.9.9`/`.8.8` 各 15 文件
+热更新核对通过，累计递增、boot ID 不变。保留 `.8.8` APP 15 秒轮询差异。
+仅重启统计服务、reload uhttpd，未构建/推送/刷机/重启路由器；仍依赖 Bandix。
+突然断电可能丢失最近约半小时增量；真实完整半小时落盘、断电及 NAND 实机尚未验证。
+备份 `/root/gwrt-backups/20261118-theme-r123-before/`；详见
+`docs/WORKLOG-20261118-gwrt-theme-r123-traffic-artwork.md`。
+
 2026-11-17 GWRT 主题 r122 流量刷新修复与监控完善：恢复 /tmp/gwrt-theme/traffic-state.json
 作为页面只读状态，主题后台采样每 5 秒更新；Bandix ubus 不可用时退回其固定 snapshot 命令，
 .9.9 与 .8.8 的 IPv4/IPv6 WAN 计数均已恢复。首页同一流量图按颜色显示双栈曲线，
@@ -51,7 +99,9 @@ SS-01 延后链、校准重启及预设检查通过。独立复核 15 分钟超�
 2026-11-17 SS-01/CS-02/CS-07 启动逻辑只读复核：对照 Honk 四机型运行
 `43704312163` / `aeb771fea65a210d9f7aaada967b14a07fd48eb0`，确认 SSID 同时由
 首启 defaults、主题 phy hotplug、子目标 `gwrt-caldata` 写入；沙盒复现 AHB/ch36
-在两套规则下被分别命名为 5.2G/5.8G。项目角色为 AHB 5.8G、PCIe QCN9074 5.2G。
+在两套规则下被分别命名为 5.2G/5.8G。硬件按机型区分：SS-01 只有 IPQ6018 AHB
+双频（`phy0`/`phy1` 都挂在 `c000000.wifi`，无 PCIe 无线），AHB 记 5.8G；CS-02/CS-07
+才带 PCIe QCN9074（记 5.2G）。
 `wifi reload` 是 netifd 重读请求，不能直接等同射频完整重启；`gwrt-caldata` 随
 base-files 安装，manifest 无独立包不代表缺失。此前“只有一处调用”“SS-01 不 reload”
 “省2–4秒”“CS-07 已排除软件”均缺依据或不正确。校准首次补齐存在等待 overlay
@@ -339,7 +389,7 @@ rsync + commit + push）。本地备份编译步骤见 `docs/WORKLOG-20261026-jd
 | `target/linux/mediatek/image/filogic.mk` | 设备定义（`comfast_cf-wr630ax*`、`qihoo_360t7*`） |
 | `package/gwrt-device-defaults/` | 首启默认值（LAN IP、SSID、wifiroam、防火墙、APK 预置） |
 | `package/gwrt-mesh-led/` | mesh 状态灯 + WPS/MESH 一键配对 |
-| `package/gwrt-mesh-apmode/` | 路由 ↔ 真 AP 状态机（服务开关、桥接、SSID 快照恢复） |
+| `package/gwrt-mesh-apmode/` | 从 AP 有线优先、无线中继和临时路由的状态机 |
 | `package/gwrt-agent/` | gwrt-agent shim（遥测 + APP 命令，含 mesh.*） |
 | `gwrt-control/` | Control 17.17 服务端/界面与容器打包（独立部署，不是路由器镜像） |
 | `package/gwrt-tv-adblock/` | 2026-11-15 已选择性同步六分类纯文本库522条，独立360分类默认拦截；旧库保留迁移及`.9.9`实机双栈DNS验证见 `docs/WORKLOG-20261115-mainap-adblock-ipv6.md` |
@@ -352,26 +402,23 @@ rsync + commit + push）。本地备份编译步骤见 `docs/WORKLOG-20261026-jd
 
 ## 3. mesh 关键实现（改动前必读）
 
-1. **配对发现**：`wifiroamd.uc` 的 `send_hello()` 同时发 LAN 广播和
-   `255.255.255.255`，`ip` 用默认路由源地址（WAN IP），否则主AP 发现不了/连不上。
-2. **SSID/密码同步**：主AP `wifi_export()` 随 `push_roam_config` 下发；
-   子AP `apply_wifi_from_cap()` 按频段套用；`gwrt.mesh_apmode.enabled=0` 时忽略。
-3. **原 SSID 快照**：`/etc/gwrt-wireless-orig`，回滚路由模式时恢复，
-   否则子AP 一直广播主路由 SSID，回退后连不上。
-4. **桥接 WAN 必须先关 HNAT**：`echo 0 > /sys/kernel/debug/hnat/hook_toggle`
-   （路径存在时），并先停 turboacc/eqos；否则 MTK 网卡 TX 队列挂死。
-5. **dropbear 用 `-l br-lan` 绑定**：切 AP/回路由/开机 AP 模式后必须 restart，
-   否则 22 端口消失。
-6. **AP 模式停用服务**：dnsmasq/odhcpd/turboacc/eqos/shadowsocksr/microsocks/
-   easytier/bandix-plus/appfilter/ttyd；回路由时按原启用状态恢复。
-7. **强制退出 AP**：`/usr/libexec/gwrt-mesh-apmode off` 或 APP
-   `mesh.apmode {"enabled":0}` → 解绑 + 回 192.168.3.3 + 恢复原 SSID + 停止广播。
-8. **回传策略**：有线 = 真 AP（无缝）；无线 = 3-addr STA + NAT（保证有网，无漫游）。
-   4-addr WDS 在 JDCloud 主AP 上不稳定；relayd 在本树缺 proto handler。
-9. **跨架构（MT7621/mipsel）**：`gwrt-agent` 的 aarch64 预编译二进制仅随 aarch64 目标安装
-   （PKGARCH:=all + Makefile 架构条件），mipsel 上 shim 自动退回最小遥测载荷；
-   `ucode-mod-socket`/`ucode-mod-digest` 必须编入固件（cp02 配置已选）；
-   预置 apk（含 aarch64 ucode-mod-socket）在 mipsel 不安装。
+1. **配对发现**：`wifiroamd.uc` 每 5 秒发发现广播。控制器只信 WAN 或无线
+   实际入接口收到的同配对指纹、同主 AP 地址的近期报文；有线还须先取到同网段租约。
+2. **回传切换**：有线优先。先停止 relayd 和 STA、确认无线断开，再将 WAN 并入
+   `br-lan`；拔线后启用无线回传。无线使用隔离的 `gwrt_mesh` DHCP 和
+   relayd，不走从 AP NAT。两路模式管理 IPv4 和普通客户端都由主 AP 分配。
+   已建立的有线才允许漏收广播时用桥上探测保活；无线重连优先试上次成功的频段。
+3. **掉线回退**：默认搜索 120 秒、原路由 60 秒，循环并保留配对。
+   「无线漫游 → 回传切换」可调。原 LAN/SSID/密码以已保存配置为准，运行时
+   使用临时 UCI 变更，旧快照只在升级时迁移。
+4. **服务顺序**：先停本地 DHCP/RA 并关 HNAT 再桥接 WAN。恢复路由先拆桥，
+   再启动原本运行的服务。Dropbear 有线绑定 LAN、无线绑定 DHCP 地址。
+5. **SSID 同步**：只在回传就绪时按频段套用主 AP 的普通 SSID；跳过隐藏回传与访客网。
+   旧版和 v5 共用协议状态、主 AP 隐藏回传和前台 SSID 模块。
+6. **显式退出**：`/usr/libexec/gwrt-mesh-apmode off` 或 APP
+   `mesh.apmode {"enabled":0}` 解绑并恢复原路由；自动回退不会解绑。
+7. **跨架构**：APP aarch64 二进制仅随 aarch64 安装；mipsel 用脚本遥测，
+   由目标固件提供 ucode socket/digest/struct。v5 和旧版均由首启脚本安装对应覆盖层。
 
 ---
 
@@ -413,20 +460,15 @@ JSON helper 位于 `package/gwrt-agent/files/usr/share/gwrt-agent/json.uc`，依
 ## 5. 验证清单
 
 ```sh
-# 未组网
-uci get wifiroam.core.role          # unconfigured
-ip -4 addr show br-lan | grep inet  # 192.168.3.3
-uci show wireless | grep ssid=      # GWRT_2.4G_xxxx / GWRT_5.2G_xxxx
+# 查当前回传及主网段管理地址
+/usr/libexec/gwrt-mesh-apmode status
+ubus call wifiroam mesh_policy
+uci get wifiroam.core.role          # 自动回退依旧为 sap
+ubus call network.interface.lan status       # 有线时拿到的租约
+ubus call network.interface.gwrt_mesh status # 无线时拿到的租约
 
-# 配对后
-uci get wifiroam.core.role          # sap
-ip -4 addr show br-lan | grep inet  # 主路由分配
-uci show wireless | grep ssid=      # 与主AP 相同
-logread | grep -E "wifi sync|state .*-> ok|AP mode ok"
-
-# 强制退出
+# 显式退出：解绑并恢复原路由配置
 /usr/libexec/gwrt-mesh-apmode off
-# → unconfigured / 192.168.3.3 / GWRT_* / 插件恢复 / discover 为空
 ```
 
 ---
@@ -437,12 +479,23 @@ logread | grep -E "wifi sync|state .*-> ok|AP mode ok"
 sh scripts/gwrt-sync-mesh.sh /path/to/openwrt
 ```
 
-复制 `gwrt-mesh-led`、`gwrt-mesh-apmode`、`gwrt-device-defaults`、
-`gwrt-agent`、`gwrt-theme` 以及 `docs/GWRT-MESH.md`。
+该脚本同步所有 `package/gwrt-*` 自定义包、项目文档、配置生成器和构建脚本。
+仅同步本轮组网改动时使用工作日志中的清单。
 
 ---
 
 ## 7. 操作日志索引
+
+- `docs/WORKLOG-20261119-mesh-backhaul.md` — 去除打赏页、有线优先和无线接替、失联循环、
+  主网段管理、测试证据及同步回滚清单。
+
+- `docs/WORKLOG-20261118-ss01-wan-curve.md` — `.3.3` 的 Bandix 加入实际 WAN，恢复首页双栈实时曲线；桌面/手机实测及回滚。
+
+- `docs/WORKLOG-20261118-gwrt-theme-r125-login.md` — 登录页改为 GWRT/原生两个直接提交按钮，分别使用当前入口与原生 81/444；不再登录前选择/登录后切换。源码、路由专项和桌面/手机测试通过；`.9.9` 实机热更新并检查最终目标，未发送凭据；`.8.8` SSH 不可达未更新。备份与回滚见日志。
+
+- `docs/WORKLOG-20261118-gwrt-theme-r124-traffic-highlight.md` — 顶栏流量与原监控正常值统一绿色高亮，未知状态转灰且保留累计；源码双副本、主题/安全回归及 `.9.9` 桌面/手机实机通过，仅 reload uhttpd。`.8.8` 当前凭据不可用未更新，统计/持久化/APP 轮询未改；备份及回滚见日志。
+
+- `docs/WORKLOG-20261118-gwrt-theme-r123-traffic-artwork.md` — 半小时固定汇总覆盖写入系统 overlay，取代 r122 日明细；两台约 1 KB，服务重启不提前写盘。CS-02/GWRT2 共用 AX6600 图，拓扑主路由/AP/已识别设备复用 Mesh 产品图并保留紧凑尺寸；源码双副本/实机 SHA、55 项统计及浏览器验证通过。未构建/推送/刷机/重启，断电最多约半小时增量边界与备份回滚见日志。
 
 - `docs/WORKLOG-20261118-tyfza1-port.md` — Realtek RTL9617C（TYFZA1 天邑光猫）平台迁入：`target/linux/rtl9617c/` 240 文件 + 三个 PON 包 + 自写 FIT 打包脚本 + `gwrt-mk/build-tyfza1`，主题依赖改 `luci-theme-gwrt`；36 个目标补丁在真实 generic 栈上零失败。全部为新增，未改 generic/其它 target/feeds。未编译未刷机：SMB 路径含冒号导致 make 无法解析，共享盘当时降级，需在无冒号本地副本编译。
 

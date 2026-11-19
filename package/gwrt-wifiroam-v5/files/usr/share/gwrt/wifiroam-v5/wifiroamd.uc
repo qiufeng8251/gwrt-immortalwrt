@@ -15,6 +15,9 @@ import * as socket from "socket";
 import * as fs from "fs";
 import * as uci from "uci";
 import { sha256 } from "digest";
+import * as mesh from "/usr/share/gwrt/wifiroam/mesh-state.uc";
+import * as meshRadio from "/usr/share/gwrt/wifiroam/mesh-radio.uc";
+import * as front from "/usr/share/gwrt/wifiroam/mesh-fronthaul.uc";
 
 // ---------------------------------------------------------------- constants
 const UDP_PORT = 50607;
@@ -523,6 +526,9 @@ function current_backhaul_cfg() {
 		ssid: cur.get("wifiroam", "backhaul", "ssid") ?? BACKHAUL_DEFAULT_SSID,
 		key: cur.get("wifiroam", "backhaul", "key") ?? "",
 		device: cur.get("wifiroam", "backhaul", "device") ?? "",
+		band: cur.get("wifiroam", "backhaul", "band") ?? "auto",
+		channel: int(cur.get("wifiroam", "backhaul", "channel") ?? 0),
+		channel2g: int(cur.get("wifiroam", "backhaul", "channel2g") ?? 0),
 		config_ver: int(cur.get("wifiroam", "backhaul", "config_ver") ?? "0"),
 	};
 }
@@ -758,7 +764,7 @@ function appctl_dnsmasq_sync(on) {
 	}
 
 	if (!changed) return false;
-	cur.commit("dhcp");
+	mesh.writeConfig(cur, "dhcp", state.cfg.role);
 	return true;
 }
 
@@ -932,7 +938,7 @@ function appctl_hw_suspend(on) {
 	if (on) {
 		if (!hw_on || marked) return;   // 本来就关着/已挂起：不动
 		cur.set("firewall", "@defaults[0]", "flow_offloading_hw", "0");
-		cur.commit("firewall");
+		mesh.writeConfig(cur, "firewall", state.cfg.role);
 		if (cur2.get("wifiroam", "appctl") == null)
 			cur2.set("wifiroam", "appctl", "appctl");
 		cur2.set("wifiroam", "appctl", "hw_suspended", "1");
@@ -941,7 +947,7 @@ function appctl_hw_suspend(on) {
 	} else {
 		if (!marked) return;            // 不是我们挂起的：别动用户设置
 		cur.set("firewall", "@defaults[0]", "flow_offloading_hw", "1");
-		cur.commit("firewall");
+		mesh.writeConfig(cur, "firewall", state.cfg.role);
 		cur2.delete("wifiroam", "appctl", "hw_suspended");
 		cur2.commit("wifiroam");
 		cmd_output("/etc/init.d/firewall reload >/dev/null 2>&1");
@@ -1316,6 +1322,8 @@ function appctl_load() {
 // 软件与硬件 offload 必须一起改：只关 hw 时软件 flowtable 依然会绕过规则。
 // 值未变化时不 reload，避免跨 AP 每次同步都重建 flowtable 打断在用连接。
 function offload_apply(on) {
+	// The satellite controller owns its forwarding path, including HNAT.
+	if (state.cfg.role == "sap" && mesh.managed()) return !on;
 	let cur = uci.cursor();
 	cur.load("firewall");
 	if (cur.get("firewall", "@defaults[0]") == null) return false;
@@ -1325,7 +1333,7 @@ function offload_apply(on) {
 		return true;
 	cur.set("firewall", "@defaults[0]", "flow_offloading", want);
 	cur.set("firewall", "@defaults[0]", "flow_offloading_hw", want);
-	cur.commit("firewall");
+	mesh.writeConfig(cur, "firewall", state.cfg.role);
 	// reload 会重建 flowtable，已 offload 的旧流随之清空，避免规则长期不生效
 	cmd_output("/etc/init.d/firewall reload >/dev/null 2>&1");
 	return true;
@@ -1438,10 +1446,13 @@ function wireless_uplink() {
 }
 
 function detect_uplink() {
+	let phase = mesh.readPhase().mode;
 	let out = cmd_output("ip route show default 2>/dev/null");
 	let words = split(trim(split(out, "\n")[0] ?? ""), " ");
 	let gw = field_after(words, "via");
 	let dev = field_after(words, "dev");
+	if (state.cfg.role == "sap" && phase == "wired")
+		return { type: "wired", port: dev ?? "br-lan", gw };
 	let wireless = dev && (fs.access(`/sys/class/net/${dev}/wireless`) ||
 	                       index(dev, "wlan") == 0 || index(dev, "wl") == 0);
 	let wl = wireless_uplink();
@@ -1483,24 +1494,7 @@ function wifi_ifaces() {
 
 // GWRT: 主AP 本机各频段的 SSID/密码，组网成功后自动下发给成员 AP。
 // 上游只在「无线设置」保存那一刻推送，配对完成不会自动同步。
-function wifi_push_spec() {
-	let out = [];
-	let cur = uci.cursor();
-	cur.load("wireless");
-	cur.foreach("wireless", "wifi-iface", function(s) {
-		if (s.mode && s.mode != "ap") return;
-		if (s.disabled == "1") return;
-		if (s.wifiroam_guest == "1") return;
-		if (is_backhaul_sec(s[".name"])) return;
-		let ssid = s.ssid ?? "";
-		if (ssid == "") return;
-		push(out, {
-			band: cur.get("wireless", s.device, "band") ?? "?",
-			ssid: ssid, key: s.key ?? "",
-		});
-	});
-	return out;
-}
+function wifi_push_spec() { return front.settings(); }
 
 // 本机各 AP 口的 11k 邻居报告元素：直接取 hostapd 自己生成的 NR（含正确的
 // op_class / channel / PHY 类型），避免自行推算信道分组出错，也保证与 AP
@@ -1550,6 +1544,7 @@ function self_info() {
 		role: state.cfg.role, uptime: self_uptime(),
 		ifaces: state.self.ifaces ?? {},
 		wifi: wifi_ifaces(), uplink: detect_uplink(),
+		backhaul: state.cfg.role == "sap" ? mesh.backhaulReport() : null,
 		nr: ap_nr_public(),
 	};
 }
@@ -1566,7 +1561,7 @@ function wifi_summary() {
 	let first_ssid = null, first_key = null;
 	cur.foreach("wireless", "wifi-iface", function(s) {
 		if (s.mode && s.mode != "ap") return;
-		if (s.wifiroam_guest == "1") return;   // 访客网络有独立面板，不参与多频合一判断
+		if (s.wifiroam_guest == "1" || is_backhaul_sec(s[".name"])) return;
 		let ssid = s.ssid ?? "";
 		let key = s.key ?? "";
 		push(ifaces, {
@@ -1599,15 +1594,10 @@ function apply_wifi_local(ssids) {
 	gc.load("gwrt");
 	if (gc.get("gwrt", "mesh_apmode", "enabled") == "0")
 		return { ok: true, count: 0 };
-	// GWRT: 第一次同步前把「路由模式」的无线配置存一份，回退路由模式时用它恢复
-	// （否则子AP 一直广播主路由 SSID，回退后连不上）
-	if (!fs.access("/etc/gwrt-wireless-orig")) {
-		let raw = fs.readfile("/etc/config/wireless");
-		if (raw) fs.writefile("/etc/gwrt-wireless-orig", raw);
-	}
 	let cur = uci.cursor();
 	cur.load("wireless");
 	let n = 0;
+	let before = mesh.wirelessVersion();
 	cur.foreach("wireless", "wifi-iface", function(s) {
 		if (s.mode && s.mode != "ap") return;
 		if (s.wifiroam_guest == "1") return;   // 访客口由访客面板单独管理
@@ -1616,9 +1606,10 @@ function apply_wifi_local(ssids) {
 		let want = null;
 		for (let it in ssids)
 			if (it.band == band) want = it;
-		if (want != null && want.ssid != "")
+		if (want == null) return;
+		if (want.ssid != "" && s.ssid != want.ssid)
 			cur.set("wireless", s[".name"], "ssid", want.ssid);
-		if (want != null && want.key != "") {
+		if (want.key != "") {
 			cur.set("wireless", s[".name"], "key", want.key);
 			// 开放网络加密为 none/空时补上 WPA2，否则设了密码也不生效
 			let enc = s.encryption ?? "";
@@ -1627,8 +1618,8 @@ function apply_wifi_local(ssids) {
 		}
 		n++;
 	});
-	cur.commit("wireless");
-	if (n > 0)
+	mesh.writeConfig(cur, "wireless", state.cfg.role);
+	if (mesh.wirelessVersion() != before)
 		cmd_output("( sleep 2; /sbin/wifi reload >/dev/null 2>&1 ) >/dev/null 2>&1 & echo ok");
 	return { ok: n > 0, count: n };
 }
@@ -1669,27 +1660,7 @@ function roam_rename_ssids(pairs) {
 // GWRT: 老 GWRT 主AP 把 SSID/密码塞在 push_roam_config 的 wifi 字段里一起下发，
 // 上游 v5 只认独立的 push_wifi_config。这里把两者收敛成同一套校验/落地逻辑。
 function apply_wifi_from_cap(list) {
-	let ssids = [];
-	let bad = false;
-	for (let it in (list ?? [])) {
-		let ssid = trim(it.ssid ?? "");
-		let key = it.key ?? "";
-		if (length(ssid) < 1 || length(ssid) > 32) bad = true;
-		if (key != "" && (length(key) < 8 || length(key) > 64)) bad = true;
-		push(ssids, { band: it.band ?? "?", ssid: ssid, key: key });
-	}
-	if (bad || length(ssids) < 1) {
-		log(sprintf("wifi from cap: %d entries, invalid", length(ssids)));
-		return { ok: false, error: "ssid_invalid" };
-	}
-	let pairs = [];
-	for (let it in wifi_summary().ifaces)
-		for (let s in ssids)
-			if (s.band == it.band) push(pairs, { old: it.ssid, new: s.ssid });
-	roam_rename_ssids(pairs);
-	let r = apply_wifi_local(ssids);
-	log(sprintf("wifi from cap: %d entries, applied=%d ok=%s", length(ssids), r.count ?? -1, r.ok ? "yes" : "no"));
-	return r;
+	return front.sync(list, state.cfg.role);
 }
 
 
@@ -1862,7 +1833,7 @@ function guest_write_wireless(cfg) {
 		if (!keep[s[".name"]]) push(stale, s[".name"]);
 	});
 	for (let sid in stale) wc.delete("wireless", sid);
-	wc.commit("wireless");
+	mesh.writeConfig(wc, "wireless", state.cfg.role);
 	return open;
 }
 
@@ -1872,12 +1843,12 @@ function guest_remove_infra() {
 	nc.load("network");
 	nc.delete("network", GUEST_IFACE);
 	nc.delete("network", GUEST_DEV);
-	nc.commit("network");
+	mesh.writeConfig(nc, "network", state.cfg.role);
 
 	let dc = uci.cursor();
 	dc.load("dhcp");
 	dc.delete("dhcp", GUEST_IFACE);
-	dc.commit("dhcp");
+	mesh.writeConfig(dc, "dhcp", state.cfg.role);
 
 	let fc = uci.cursor();
 	fc.load("firewall");
@@ -1889,7 +1860,7 @@ function guest_remove_infra() {
 	for (let r in [ "wifiroam_guest_dhcp", "wifiroam_guest_dns_u", "wifiroam_guest_dns_t",
 	                GUEST_FWD_WAN, GUEST_FWD_LAN, GUEST_SNAT ])
 		fc.delete("firewall", r);
-	fc.commit("firewall");
+	mesh.writeConfig(fc, "firewall", state.cfg.role);
 }
 
 // 访客桥 / 接口 / DHCP / 防火墙。桥本身固定 br-guest，端口由 guest_port_sync 填。
@@ -1906,7 +1877,7 @@ function guest_write_infra(cfg) {
 	nc.set("network", GUEST_IFACE, "device", GUEST_BRIDGE);
 	nc.set("network", GUEST_IFACE, "ipaddr", GUEST_IP);
 	nc.set("network", GUEST_IFACE, "netmask", "255.255.255.0");
-	nc.commit("network");
+	mesh.writeConfig(nc, "network", state.cfg.role);
 
 	let dc = uci.cursor();
 	dc.load("dhcp");
@@ -1921,7 +1892,7 @@ function guest_write_infra(cfg) {
 	dc.set("dhcp", GUEST_IFACE, "dhcpv4", "server");
 	dc.set("dhcp", GUEST_IFACE, "dhcpv6", "disabled");
 	dc.set("dhcp", GUEST_IFACE, "force", "1");
-	dc.commit("dhcp");
+	mesh.writeConfig(dc, "dhcp", state.cfg.role);
 
 	let fc = uci.cursor();
 	fc.load("firewall");
@@ -1993,7 +1964,7 @@ function guest_write_infra(cfg) {
 	// "oifname br-guest" 的 srcnat_guest 链里，反而会把去访客的下行包 SNAT 掉。
 	// SNAT 改由 guest_nft_apply 写在自建表（oifname 为 lan 侧）。
 	fc.delete("firewall", GUEST_SNAT);
-	fc.commit("firewall");
+	mesh.writeConfig(fc, "firewall", state.cfg.role);
 }
 
 // 独立 nft 表做访客→内网的兜底拦截（fw4 的 accept 规则之前生效）。
@@ -2123,7 +2094,7 @@ guest_port_sync = function(cfg, cb, tries) {
 		let nc = uci.cursor();
 		nc.load("network");
 		nc.delete("network", GUEST_DEV);
-		nc.commit("network");
+		mesh.writeConfig(nc, "network", state.cfg.role);
 		if (cb) cb();
 		return;
 	}
@@ -2142,7 +2113,7 @@ guest_port_sync = function(cfg, cb, tries) {
 		nc.set("network", GUEST_DEV, "ports", ports);
 	else
 		nc.delete("network", GUEST_DEV, "ports");
-	nc.commit("network");
+	mesh.writeConfig(nc, "network", state.cfg.role);
 	if (cb) cb();
 };
 
@@ -2209,6 +2180,7 @@ guest_save_local = function(g) {
 // 定时检查开放时段；只在跨过边界时重启无线。限速规则每轮同步一次
 guest_tick = function() {
 	if (state.cfg.role == "unconfigured") return;
+	if (state.cfg.role == "sap" && mesh.managed()) return;
 	let g = guest_cfg();
 	if (!g.enabled) {
 		state.guest_open = false;
@@ -2244,7 +2216,7 @@ guest_tick = function() {
 		if (s.wifiroam_guest != "1") return;
 		wc.set("wireless", s[".name"], "disabled", open ? "0" : "1");
 	});
-	wc.commit("wireless");
+	mesh.writeConfig(wc, "wireless", state.cfg.role);
 	push_event("guest_schedule", "", open ? "open" : "closed");
 	uloop.process("/sbin/wifi", [ "reload" ], null, function() {
 		guest_port_sync(g, function() {
@@ -2821,42 +2793,37 @@ function udp_send(obj) {
 	if (!udp_sock) return;
 	udp_sock.send(sprintf("%.J", obj), 0,
 		{ address: state.bcast ?? "255.255.255.255", port: UDP_PORT });
+	if ((state.bcast ?? "") != "255.255.255.255")
+		udp_sock.send(sprintf("%.J", obj), 0, { address: "255.255.255.255", port: UDP_PORT });
 }
 
-// GWRT: 开机时上行可能还没地址（无线回传/中继），distributed 发现依赖上报的 IP
-// 和广播地址，所以在非 CAP 角色下每 10 秒校正一次自己的地址。
 function refresh_self_addr() {
-	if (!state.self || state.cfg.role == "cap") return;
-	let ip = null, mask = 24;
-	let w = ubusc.call("network.interface.wwan", "status");
-	let a = w?.["ipv4-address"]?.[0];
-	if (a?.address) { ip = a.address; mask = a.mask ?? 24; }
-	else {
-		let src = trim(cmd_output("ip -4 route get 1.1.1.1 2>/dev/null | sed -n 's/.* src \\([0-9.]*\\).*/\\1/p'"));
-		if (src != "" && src != "1.1.1.1") ip = src;
-	}
-	if (ip == null || ip == state.self.ip) return;
-	state.self.ip = ip;
-	state.bcast = lan_broadcast(ip, mask);
-	log(sprintf("self ip -> %s (bcast %s)", ip, state.bcast));
+	let a = mesh.localAddress(ubusc, state.cfg.role, mesh.readPhase().mode);
+	if (!a || !state.self) return;
+	state.self.ip = a.address;
+	state.bcast = lan_broadcast(a.address, a.mask ?? 24);
 }
 
 function send_hello() {
+	let gc = uci.cursor();
+	if (state.cfg.role != "cap" && gc.get("gwrt", "mesh_apmode", "enabled") == "0") return;
+	refresh_self_addr();
 	udp_send({
 		magic: MAGIC, ver: 1, role: state.cfg.role,
 		mac: state.self.mac, ip: state.self.ip,
 		name: state.self.name, model: state.self.model,
 		nonce: state.self.nonce,
-		thash: substr(sha256("wifiroam:" + state.cfg.token), 0, 16),
+		thash: mesh.pairingHash(state.cfg.token),
 		alias_ver: state.aliases.ver, ts: time(),
 	});
 }
 
 function udp_rx() {
 	while (true) {
-		let peer = {};
-		let data = udp_sock.recv(4096, 0, peer);
-		if (!data) break;
+		let pkt = mesh.receive(udp_sock);
+		if (!pkt) break;
+		let data = pkt.data;
+		let peer = pkt.address ?? {};
 		let msg;
 		try { msg = json(data); } catch (e) { continue; }
 		if (type(msg) != "object" || msg.magic != MAGIC) continue;
@@ -2872,8 +2839,9 @@ function udp_rx() {
 			continue;
 		}
 
-		let my_th = substr(sha256("wifiroam:" + state.cfg.token), 0, 16);
+		let my_th = mesh.pairingHash(state.cfg.token);
 		if (state.cfg.token == "" || msg.thash != my_th) continue; // foreign net
+		mesh.observeCap(pkt, msg, state.cfg, my_th);
 
 		let p = state.peers[mn] ??= { clients: null }; // null = 未收过 report，首轮 diff 抑制
 		p.mac = uc(msg.mac);
@@ -2908,6 +2876,7 @@ function setup_udp() {
 	if (!udp_sock) { log("udp create failed"); return; }
 	udp_sock.setopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, true);
 	udp_sock.setopt(socket.SOL_SOCKET, socket.SO_BROADCAST, true);
+	if (!mesh.enableIngress(udp_sock)) log("could not enable UDP ingress tracking");
 	if (!udp_sock.bind("0.0.0.0:" + UDP_PORT)) {
 		log("udp bind failed: " + socket.error());
 		udp_sock.close(); udp_sock = null;
@@ -2985,6 +2954,7 @@ function client_node(mn, c, parent) {
 
 function build_topology() {
 	let nodes = [];
+	let now = clock(true)[0];
 	let self_mn = macnorm(state.self.mac);
 	device_group_refresh();
 	let myclients = local_clients();
@@ -3018,6 +2988,7 @@ function build_topology() {
 			ip: p.info?.ip ?? p.ip, mac: p.mac ?? maccolon(mn),
 			parent: self_mn,
 			uplink: p.info?.uplink ?? null,
+			backhaul: mesh.peerBackhaul(state.cfg.role, p, now),
 			firmware: p.info?.firmware ?? null,
 			uptime: p.info?.uptime ?? null,
 			authed: !!p.authed,
@@ -3288,6 +3259,7 @@ function member_list() {
 }
 
 function apply_roam_local(roam, members) {
+	let before = mesh.wirelessVersion();
 	let cur = uci.cursor();
 	cur.load("wireless");
 	let touched = [];
@@ -3295,16 +3267,16 @@ function apply_roam_local(roam, members) {
 
 	cur.foreach("wireless", "wifi-iface", function(s) {
 		if (s.mode && s.mode != "ap") return;
-		if (s.wifiroam_guest == "1") return;
+		if (s.wifiroam_guest == "1" || is_backhaul_sec(s[".name"])) return;
 		let sid = s[".name"];
 		let in_group = roam.enabled && index(roam.ssids ?? [], s.ssid) >= 0;
 
 		if (in_group) {
 			// R（802.11r）可单独关闭：关闭时移除全部 FT 相关键，只保留 K/V
-			if (roam.r_fast) {
+			if (roam.r_fast && (roam.ft_mode != "explicit" || mesh.readPhase().mode != "wireless")) {
 				cur.set("wireless", sid, "ieee80211r", "1");
 				cur.set("wireless", sid, "mobility_domain", roam_md(s.ssid));
-				cur.set("wireless", sid, "ft_over_ds", roam.ft_over_ds ? "1" : "0");
+				cur.set("wireless", sid, "ft_over_ds", roam.ft_over_ds && mesh.readPhase().mode != "wireless" ? "1" : "0");
 				cur.set("wireless", sid, "reassociation_deadline", "2000");
 				if (roam.ft_mode == "explicit") {
 					cur.set("wireless", sid, "ft_psk_generate_local", "0");
@@ -3346,7 +3318,7 @@ function apply_roam_local(roam, members) {
 		}
 	});
 
-	cur.commit("wireless");
+	if (!mesh.writeConfig(cur, "wireless", state.cfg.role)) return { ok: false, error: "uci" };
 	state.roam_ver_applied = roam.config_ver ?? state.roam_ver_applied;
 	// 整份漫游配置落盘：SAP 的设置页读取本地 uci，只写 ver/enabled 会让
 	// 子 AP 显示与主 AP 不一致（SSID 组、FT 模式、k/v 开关等仍是默认值）
@@ -3380,8 +3352,9 @@ function apply_roam_local(roam, members) {
 		}
 	}
 	if (dirty) wc.commit("wifiroam");
-	uloop.process("/sbin/wifi", [ "reload" ], null,
-		function(res) { log("wifi reload rc=" + res); });
+	if (before != mesh.wirelessVersion())
+		uloop.process("/sbin/wifi", [ "reload" ], null,
+			function(res) { log("wifi reload rc=" + res); });
 	push_event("roam_apply", "",
 		sprintf("ver=%d ssids=%d", roam.config_ver ?? 0, length(touched)));
 	return { ok: true, touched, ver: state.roam_ver_applied };
@@ -3419,97 +3392,21 @@ function wifi_radios() {
 	return out;
 }
 
-function pick_radio(prefer) {
-	let radios = wifi_radios();
-	for (let r in radios)
-		if (!r.disabled && r.name == prefer) return r.name;
-	for (let r in radios)
-		if (!r.disabled && r.band == "5g") return r.name;
-	for (let r in radios)
-		if (!r.disabled) return r.name;
-	return null;
-}
-
-// 上级 AP 的 MAC 若出现在以太网口上，说明当前仍有有线回程。
-// 此时不能把 STA 桥进 br-lan，否则会形成二层环路；只暂存配置待拔线后自动启用。
-function ethernet_uplink_port() {
-	let fdb = parse_fdb();
-	for (let mn, p in state.peers) {
-		let role = p.info?.role ?? p.role;
-		if (role != "cap") continue;
-		let port = fdb[mn];
-		if (port && index(port, "phy") != 0 && index(port, "wl") != 0 &&
-		    index(port, "vap") != 0 && index(port, "br") != 0)
-			return port;
-	}
-	return null;
-}
-
 function apply_backhaul_local(bh, role) {
-	let cur = uci.cursor();
-	cur.load("wireless");
-	let exists = cur.get("wireless", BACKHAUL_SECTION) != null;
-
-	if (bh.enabled && (bh.ssid ?? "") != "" && (bh.key ?? "") != "") {
-		let dev = pick_radio(role == "cap" ? (bh.device ?? "") : "");
-		if (!dev) return { ok: false, error: "no_radio" };
-		cur.set("wireless", BACKHAUL_SECTION, "device", dev);
-		cur.set("wireless", BACKHAUL_SECTION, "mode", role == "cap" ? "ap" : "sta");
-		cur.set("wireless", BACKHAUL_SECTION, "ssid", bh.ssid);
-		cur.set("wireless", BACKHAUL_SECTION, "encryption", "psk2+ccmp");
-		cur.set("wireless", BACKHAUL_SECTION, "key", bh.key);
-		cur.set("wireless", BACKHAUL_SECTION, "network", "lan");
-		cur.set("wireless", BACKHAUL_SECTION, "wds", "1");
-		if (role == "cap") {
-			cur.set("wireless", BACKHAUL_SECTION, "hidden", "1");
-			cur.set("wireless", BACKHAUL_SECTION, "disabled", "0");
-		} else {
-			cur.delete("wireless", BACKHAUL_SECTION, "hidden");
-			cur.set("wireless", BACKHAUL_SECTION, "disabled",
-				ethernet_uplink_port() ? "1" : "0");
-		}
-	} else if (exists) {
-		cur.delete("wireless", BACKHAUL_SECTION);
-	}
-	cur.commit("wireless");
-
-	let ver = bh.config_ver ?? 0;
-	let wc = uci.cursor();
-	wc.load("wifiroam");
-	wc.set("wifiroam", "backhaul", "enabled", bh.enabled ? "1" : "0");
-	wc.set("wifiroam", "backhaul", "ssid", bh.ssid ?? BACKHAUL_DEFAULT_SSID);
-	wc.set("wifiroam", "backhaul", "key", bh.key ?? "");
-	wc.set("wifiroam", "backhaul", "device", bh.device ?? "");
-	wc.set("wifiroam", "backhaul", "config_ver", "" + ver);
-	wc.commit("wifiroam");
-	state.backhaul_ver_applied = ver;
-
-	uloop.process("/sbin/wifi", [ "reload" ], null,
-		function(res) { log("backhaul wifi reload rc=" + res); });
-	push_event("backhaul_apply", "",
-		sprintf("ver=%d %s", ver, bh.enabled ? "wireless" : "off"));
-	return { ok: true, ver };
+	let result = role == "cap" ?
+		meshRadio.applyCap(bh, ubusc, function() {
+			uloop.process("/sbin/wifi", [ "reload" ], null, function(rc) { log("backhaul wifi reload rc=" + rc); });
+		}) : mesh.saveBackhaul(bh);
+	if (result.ok) state.backhaul_ver_applied = result.ver;
+	return result;
 }
 
-// SAP 侧：有线/无线回程互斥。网线在位时 STA 保持 disabled，拔线后自动启用；
-// 重新插回网线则暂停 STA，避免二层环路。
-function backhaul_tick() {
-	if (state.cfg.role != "sap") return;
-	let bh = current_backhaul_cfg();
-	if (!bh.enabled) return;
-	let cur = uci.cursor();
-	cur.load("wireless");
-	if (cur.get("wireless", BACKHAUL_SECTION) == null) return;
-	let want = ethernet_uplink_port() ? "1" : "0";
-	if ((cur.get("wireless", BACKHAUL_SECTION, "disabled") ?? "0") == want) return;
-	cur.set("wireless", BACKHAUL_SECTION, "disabled", want);
-	cur.commit("wireless");
-	push_event("backhaul_link", "",
-		want == "1" ? "wired uplink detected, wireless STA paused"
-		            : "cable removed, wireless backhaul enabled");
-	uloop.process("/sbin/wifi", [ "reload" ], null,
-		function(res) { log("backhaul switch rc=" + res); });
+function reconcile_cap_backhaul() {
+	if (state.cfg.role != "cap") return;
+	let result = apply_backhaul_local(current_backhaul_cfg(), "cap");
+	if (!result.ok) log("CAP backhaul configuration failed: " + result.error);
 }
+
 
 // --------------------------------------------------------------- prechecks
 function ssid_groups() {
@@ -3669,12 +3566,16 @@ function sap_rx(req) {
 
 	switch (req.type) {
 	case "push_roam_config": {
+		if (mesh.managed() && !mesh.ready(mesh.readPhase().mode)) {
+			req.reply({ ok: false, error: "link_pending" });
+			break;
+		}
 		log(sprintf("roam push recv: wifi=%d", length(req.args.wifi ?? [])));
-		let r = apply_roam_local(req.args.roam, req.args.members ?? []);
-		// GWRT: 老 GWRT 主AP 把 SSID/密码随漫游配置一起下发
+		// Older CAPs combine the SSID and roaming settings in one push.
 		let w = req.args.wifi;
-		if (type(w) == "array" && length(w) > 0)
-			apply_wifi_from_cap(w);
+		let sync = apply_wifi_from_cap(w);
+		if (!sync.ok) { req.reply(sync); break; }
+		let r = apply_roam_local(req.args.roam, req.args.members ?? [], sync.changed);
 		req.reply({ ok: r.ok, ver: r.ver,
 		            kvr: applied_kvr(req.args.roam?.ssids ?? []) });
 		break;
@@ -3695,12 +3596,24 @@ function sap_rx(req) {
 		break;
 	}
 	case "push_wifi_config": {
+		if (mesh.managed() && !mesh.ready(mesh.readPhase().mode)) {
+			req.reply({ ok: false, error: "link_pending" });
+			break;
+		}
 		// CAP 下发的前台 SSID/密码：SAP 按频段改写本地 wireless 并重启无线
 		let r = apply_wifi_from_cap(req.args.ssids);
+		if (r.changed)
+			uloop.process("/sbin/wifi", [ "reload" ], null, function(rc) { log("wifi reload rc=" + rc); });
 		req.reply({ ok: r.ok, error: r.error });
 		break;
 	}
 	case "push_guest_config": {
+		// The CAP guest subnet needs a local DHCP/NAT server. Keep the
+		// original router's guest settings during satellite mode.
+		if (mesh.managed()) {
+			req.reply({ ok: false, error: "guest_local_only" });
+			break;
+		}
 		// CAP 下发的访客网络配置：SAP 本地落盘并重建访客子网
 		let g = req.args.guest ?? {};
 		if (!guest_save_local(g)) {
@@ -3771,6 +3684,17 @@ function sap_connect(cap_ip) {
 
 function sap_tick() {
 	if (state.cfg.role != "sap") return;
+	if (mesh.managed()) {
+		let phase = mesh.readPhase();
+		let current = mesh.ready(phase.mode) ? phase.mode + ":" + phase.ip + ":" + phase.since : null;
+		if (current != state.mesh_session) {
+			state.mesh_session = current;
+			state.roam_ver_applied = -1;
+			sap_disconnect();
+		}
+		if (!current) return;
+		refresh_self_addr();
+	}
 	if (state.link?.authed) {
 		// 心跳看门狗：ucode 通道可能感知不到对端死亡（CLOSE_WAIT 半开），
 		// 以 report_status 回执刷新 last_pong，超时主动断开重连
@@ -3851,6 +3775,10 @@ function srv_rx(conn, req) {
 				req.reply({ ok: false, error: "bad_nonce" });
 				return 0;
 			}
+			if (type(args.backhaul) == "object" && !mesh.saveBackhaul(args.backhaul).ok) {
+				req.reply({ ok: false, error: "backhaul_config" });
+				return 0;
+			}
 			state.cfg.token = args.token;
 			state.cfg.cap_ip = args.cap_ip ?? "";
 			state.cfg.role = "sap";
@@ -3900,7 +3828,7 @@ function srv_rx(conn, req) {
 			     (args.roam_sig && args.roam_sig != rsig)))
 				push_roam_to(mn);
 			let bh = current_backhaul_cfg();
-			if (state.cfg.role == "cap" && bh.enabled &&
+			if (state.cfg.role == "cap" &&
 			    (args.backhaul_ver ?? -1) < bh.config_ver)
 				push_backhaul_to(mn);
 			/* 访客配置也要在这里补发：只在保存那一刻推送的话，
@@ -3924,7 +3852,12 @@ function srv_rx(conn, req) {
 	let mn = macnorm(conn.mac);
 	switch (req.type) {
 	case "report_status": {
-		let p = state.peers[mn] ??= { clients: null };
+		let p = state.peers[mn];
+		if (p?.conn != conn) {
+			req.reply({ ok: false, error: "superseded" });
+			return 0;
+		}
+		conn.reported_at = clock(true)[0];
 		let prev = p.clients;
 		p.info = args.info;
 		p.clients = args.clients ?? {};
@@ -3945,7 +3878,7 @@ function srv_rx(conn, req) {
 		    (p.roam_sig != "" && p.roam_sig != roam_sig(roam)))
 			push_roam_to(mn);
 		let bh = current_backhaul_cfg();
-		if (bh.enabled && p.backhaul_ver < bh.config_ver)
+		if (p.backhaul_ver < bh.config_ver)
 			push_backhaul_to(mn);
 		let ga = guest_cfg();
 		if (state.cfg.role == "cap" && p.guest_ver < ga.ver)
@@ -4033,7 +3966,7 @@ function srv_accept() {
 		let addr = {};
 		let cs = tcp_srv.accept(addr);
 		if (!cs) break;
-		let conn = { sock: cs, authed: false, nonce: randhex(16) };
+		let conn = { sock: cs, address: addr.address, authed: false, nonce: randhex(16) };
 		conn.chan = libubus.open_channel(
 			cs,
 			function(req) { return srv_rx(conn, req); },
@@ -4487,6 +4420,14 @@ function appctl_public_days(src, online) {
 }
 
 let api_obj = {
+	mesh_policy: {
+		args: { ubus_rpc_session: "" },
+		call: function() { return mesh.getPolicy(); },
+	},
+	set_mesh_policy: {
+		args: { ubus_rpc_session: "", search_seconds: 0, router_seconds: 0 },
+		call: function(req) { return mesh.setPolicy(req.args); },
+	},
 	status: {
 		args: { ubus_rpc_session: "" },
 		call: function(req) {
@@ -4513,6 +4454,7 @@ let api_obj = {
 				version: DAEMON_VERSION,
 				daemon_started: daemon_started,
 				kvr: applied_kvr(current_roam_cfg().ssids),
+				mesh_mode: mesh.readPhase().mode,
 				role: state.cfg.role, name: state.self.name,
 				mac: state.self.mac, ip: state.self.ip,
 				cap_ip: state.cfg.cap_ip != "" ? state.cfg.cap_ip : state.cap_learned,
@@ -4654,6 +4596,7 @@ let api_obj = {
 			save_config();
 			if (r == "cap") roam_default_init();
 			reconfigure();
+			reconcile_cap_backhaul();
 			return { ok: true, role: r };
 		},
 	},
@@ -4978,6 +4921,7 @@ let api_obj = {
 								data: {
 									token: state.cfg.token,
 									cap_ip: state.self.ip,
+									backhaul: current_backhaul_cfg(),
 									nonce_echo: d.nonce,
 								},
 								data_cb: function(m) {
@@ -5357,6 +5301,7 @@ function neighbor_sync(bsses) {
 // 关键点：BTM 请求必须带候选列表（neighbors）。没有候选时多数手机
 // （华为/荣耀/部分 IoT）会直接忽略请求，表现为“信号很差也不切换”。
 function steer_tick() {
+	if (state.cfg.role == "sap" && mesh.managed() && !mesh.ready(mesh.readPhase().mode)) return;
 	if (state.cfg.role == "unconfigured") return;
 	let roam = current_roam_cfg();
 	if (!roam.enabled || !roam.v_bss_transition) return;
@@ -5491,6 +5436,7 @@ reconfigure = function() {
 	sap_disconnect();
 	state.peers = {};
 	state.cap_learned = null;
+	state.mesh_session = null;
 	state.prev_clients = null;
 	state.wired_seen = {};
 	state.wifi_seen = {};
@@ -5511,6 +5457,7 @@ reconfigure = function() {
 // 注意：ucode 的函数声明不做提升，本函数必须定义在 wifi_ifaces /
 // member_list / apply_roam_local / applied_kvr 之后。
 roam_default_init = function() {
+	if (state.cfg.role != "cap") return;
 	let cur = uci.cursor();
 	cur.load("wifiroam");
 	if (int(cur.get("wifiroam", "roam", "config_ver") ?? "0") != 0) return;
@@ -5564,15 +5511,14 @@ function main() {
 
 	setup_udp();
 	setup_tcp();
+	reconcile_cap_backhaul();
 
 	ubusc.publish("wifiroam", api_obj);
 
-	uloop.interval(HELLO_INTERVAL, refresh_self_addr);
 	uloop.interval(HELLO_INTERVAL, send_hello);
 	uloop.interval(TICK_INTERVAL, sap_tick);
 	uloop.interval(TICK_INTERVAL, sap_report);
 	uloop.interval(TICK_INTERVAL, expire_tick);
-	uloop.interval(TICK_INTERVAL, backhaul_tick);
 	uloop.interval(TICK_INTERVAL, steer_tick);
 	uloop.interval(TICK_INTERVAL, pin_tick);
 	uloop.interval(TICK_INTERVAL, guest_tick);

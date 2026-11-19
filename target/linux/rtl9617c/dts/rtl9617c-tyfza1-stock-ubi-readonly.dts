@@ -3,7 +3,7 @@
 // Only for the matching stock layout; not a universal TYFZA1 flash layout.
 #include "rtl9617c-tyfza1-nand-readonly.dts"
 
-/ { model = "Tianyi TYFZA1 (stock UBI layout, read-only experiment)"; };
+/ { model = "TYFZA1"; };
 
 &qspi {
 	flash@0 {

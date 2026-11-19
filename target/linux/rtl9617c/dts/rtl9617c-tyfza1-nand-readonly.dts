@@ -2,7 +2,7 @@
 #include "rtl9617c-tyfza1.dts"
 
 / {
-	model = "Tianyi TYFZA1 (RTL9617C NAND read-only experiment)";
+	model = "TYFZA1";
 };
 
 &qspi {

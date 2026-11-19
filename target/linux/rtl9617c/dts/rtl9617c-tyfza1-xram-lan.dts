@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 #include "rtl9617c-tyfza1-stock-ubi-readonly.dts"
 
-/ { model = "Tianyi TYFZA1 (management XRAM LAN bring-up)"; };
+/ { model = "TYFZA1"; };
 
 &mdio {
 	status = "okay";
