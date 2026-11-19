@@ -1,9 +1,7 @@
 # GWRT Mesh（无线漫游组网）设计与实现
 
-> 适用固件：GWRT 261025-33 及以后
-> 适用机型：XINGLOO AX3000 (COMFAST CF-WR630AX)、Qihoo 360T7
-> 目标：多台 GWRT AP 组成同一 ESS，支持一键/自动配对、无线/有线回传、
-> 组网后自动变真 AP、解绑自动回路由模式，并可通过 APP（gwrt-agent）控制。
+使用本文回传策略需安装 2026-11-19 更新的 GWRT Mesh 源码。已有配对可沿用。
+有线与无线回传的普通客户端均由主 AP 分配 IPv4 地址，可从主网段直接访问从 AP。
 
 ---
 
@@ -11,12 +9,11 @@
 
 | 角色 | 含义 | 行为 |
 |---|---|---|
-| `unconfigured` | 出厂/重置状态（默认） | 普通路由，后台 192.168.3.3（360T7 为 .4），所有插件正常；持续广播 HELLO 等待主AP 配对 |
+| `unconfigured` | 出厂/重置状态（默认） | 普通路由，使用原 LAN 地址、SSID 和路由服务；广播 HELLO 等待配对 |
 | `cap` | 主AP（主路由） | 接受子AP 连接，下发漫游/回传/SSID/密码，可主动发现并配对未配置 AP |
-| `sap` | 子AP | 已配对；有线上行时走网线，无线上行时自动建 WDS STA 回传 |
+| `sap` | 子AP | 保留配对；优先使用确认通往主 AP 的 WAN 口，断开后尝试无线 |
 
-配对完成后子AP 自动变「真 AP」：关本机 DHCP、LAN 改 DHCP 客户端（IP 由主路由分配）、
-有线回传时把 WAN 口并进 br-lan（取消 NAT）、关掉用不上的插件。
+从 AP 回传建立后停止本地 DHCP。管理地址和客户端 IPv4 地址均由主 AP 的 DHCP 提供。
 
 ---
 
@@ -24,9 +21,9 @@
 
 | 包 | 关键文件 | 作用 |
 |---|---|---|
-| `package/gwrt-mesh-apmode` | `/etc/init.d/gwrt-mesh-apmode`<br>`/usr/libexec/gwrt-mesh-apmode`<br>`/etc/uci-defaults/98_gwrt-mesh-apmode` | 路由 ↔ AP 状态机、服务开关、LAN/WAN 避让、无线回传 STA 自动创建、原 SSID 恢复 |
+| `package/gwrt-mesh-apmode` | `/etc/init.d/gwrt-mesh-apmode`<br>`/usr/libexec/gwrt-mesh-apmode`<br>`/etc/uci-defaults/98_gwrt-mesh-apmode` | 状态选择、接入检测、网络、无线、旧配置迁移和 FT 修复分别放在 `/usr/share/gwrt/mesh-apmode/` |
 | `package/gwrt-mesh-led` | `/etc/init.d/gwrt-mesh-led`<br>`/usr/libexec/gwrt-mesh-led`<br>`/usr/libexec/gwrt-mesh-pair`<br>`/etc/rc.wps/50-gwrt-mesh`<br>`/etc/uci-defaults/99_gwrt-mesh-led` | mesh 状态灯 + WPS/MESH 键一键配对 |
-| `package/gwrt-device-defaults` | `92_gwrt-wifiroam-fw`<br>`94_gwrt-lan-ip`<br>`95_gwrt-wifi-defaults`<br>`97_gwrt-wifiroam-defaults`<br>`98_gwrt-agent-defaults`<br>`gwrt-ssid-name`<br>`gwrt-wifiroam-autopair`<br>`files/wifiroam/wifiroamd.uc` | 首启默认值、SSID 命名、wifiroam 配置、防火墙放行、补丁版守护进程、自动配对 |
+| `package/gwrt-device-defaults` | `92_gwrt-wifiroam-fw`<br>`94_gwrt-lan-ip`<br>`95_gwrt-wifi-defaults`<br>`97_gwrt-wifiroam-defaults`<br>`98_gwrt-agent-defaults`<br>`gwrt-ssid-name`<br>`gwrt-wifiroam-autopair`<br>`files/wifiroam/wifiroamd.uc` | 首启默认值、SSID 命名、wifiroam 配置、防火墙放行、补丁版守护进程、自动配对；与 v5 共用 `mesh-state.uc`、`mesh-radio.uc`、`mesh-fronthaul.uc` |
 | `package/gwrt-agent` | `/usr/sbin/gwrt-agent` | 上报 mesh 状态、接收 APP 下发的 mesh 命令 |
 | `package/gwrt-theme/luci-theme-gwrt` | `lib/functions/gwrt-wireless.sh`<br>`etc/hotplug.d/ieee80211/30-gwrt-ssid-name` | SSID 命名保护（主AP 下发的同名 SSID 不会被改回本机后缀） |
 
@@ -34,29 +31,27 @@
 
 ## 3. 状态机（`gwrt-mesh-apmode`）
 
-每 10 秒轮询一次 `ubus call wifiroam status`。
+控制器每约 2 秒检查回传；保持 `wifiroam.core.role=sap` 和原配对。主 AP 每 5 秒发送发现广播。
 
-```
-未组网 / 解绑
-  └─ 普通路由：LAN 192.168.3.3，本机 DHCP 开，插件全开
-       │ 配对成功（role=sap && cap_ip && (peers_online>0 || 无线 STA up)）
-       ▼
-  已组网（连续 2 次确认，约 20s）
-  └─ 真 AP：
-       · 停 dnsmasq/odhcpd/turboacc/eqos/shadowsocksr/microsocks/easytier/bandix-plus/appfilter/ttyd
-       · 关 HNAT/PPE（必须先关，否则桥接 WAN 会挂死网卡）
-       · 有线回传：eth1 并进 br-lan，wan proto=none
-       · LAN 改 DHCP 客户端（IP 由主路由分配），dhcp.lan.ignore=1
-       · network reload + ifup lan + dropbear restart
-       · 25s 内拿不到地址 → 自动回滚
-       │ 断连（连续 2 次，约 20s）
-       ▼
-  回滚普通路由：
-       · 拆 eth1 桥接、恢复 LAN 静态 IP、恢复 DHCP、恢复插件
-       · 用 /etc/gwrt-wireless-orig 恢复原 SSID/密码
-       · wifiroam.roam.config_ver=0（下次配对重新下发）
-       · 删掉 wifiroam_bh STA
-```
+| 状态 | 从 AP 的行为 |
+|---|---|
+| 待命搜索（默认 120 秒） | WAN 口保持隔离并尝试 DHCP；无线 STA 尝试关联隐藏回传。停止本地 DHCP/RA。 |
+| 有线接入 | WAN 口收到匹配配对指纹、主 AP 源地址的近期广播并获同网段租约后，先关无线中继并确认 STA 断开，再并入 `br-lan`。从 AP 用 `lan` DHCP 拿管理地址。 |
+| 无线接入 | 有线未确认时，用独立 STA 接口 `gwrt_mesh` 获管理地址，启动 IPv4 DHCP/ARP 中继。插错线继续走无线。 |
+| 临时路由（默认 60 秒） | 两路都未连上，恢复原 LAN/WAN、SSID、密码及本机 DHCP。窗口到期继续搜索；确认网线已回到主 AP 时可以提前搜索。 |
+
+拔线或检测到 WAN 已重新插过时退出桥接，确认 WAN 已脱桥后才启用 STA。桥接后若 25 秒内
+没有在桥上重新收到配对广播并取到主网段 LAN 租约，恢复搜索。已完成组网的有线若 16 秒
+没收到配对广播，仅在 WAN 载波、掉线计数、桥成员和主网段租约仍有效时，从 `br-lan` 每
+约 4 秒探测主 AP。连续 3 次探测失败才退出；新网线仍须通过配对广播和 DHCP 验证。
+
+重新连接后，从 AP 同步主 AP 的 SSID 和漫游配置。切换可能取得新的 IPv4 管理地址。
+在主 AP 的 Mesh 拓扑点开从 AP，可查看回传方式、无线频段和最近切换原因，并直接打开
+其 LuCI 管理页。链接使用当前已认证连接的 IPv4；连接关闭或状态过期后隐藏。
+
+LuCI 的「无线漫游 → 回传切换」可分别修改两段时间（15–3600 秒），并显示
+当前模式及管理地址。日常循环只使用 UCI 的运行时变更。路由模式的 LAN 地址、SSID 和
+服务启用状态保留；需要保存正式网络或无线配置时，使用临时路由窗口，或先退出从 AP 模式。
 
 ### 强制退出 AP（不依赖网络）
 
@@ -74,15 +69,10 @@
 
 ## 4. 配对流程
 
-1. 子AP（unconfigured）每 5s 发 UDP HELLO 到 **LAN 广播 + 255.255.255.255**；
-   `ip` 字段用**默认路由的源地址**（WAN/回传口），保证主AP 能回连（不能用 192.168.3.3）。
-2. 主AP `wifiroam.discover` 列出未配置设备（MAC/IP/名称/型号）。
-3. 主AP `wifiroam.pair {mac}` → TCP 50608 发 `join`（token + nonce）。
-4. 子AP 变成 `sap`，保存 `cap_ip`；随后连回主AP 并认证。
-5. 主AP 在认证时下发：
-   - `push_roam_config`：k/v/r + FT 参数 + **SSID/加密/密码**
-   - `push_backhaul_config`：回传 SSID/密码
-6. 子AP 应用后回执；主AP 汇总状态。
+1. 未配置的设备用 WAN 获得主网段地址；无网线时可用预设隐藏回传凭据先连无线。
+2. 设备每 5 秒发 HELLO，主 AP 在「Mesh 配对」列出设备。
+3. 主 AP 通过 TCP 50608 发 `join`，下发主 AP 地址、配对 token 和回传配置。
+4. 从 AP 保存配对。回传就绪后连接主 AP，确认身份并同步前台 SSID 和漫游配置。
 
 一键配对：WPS/MESH 键 → `/etc/rc.wps/50-gwrt-mesh` → `/usr/libexec/gwrt-mesh-pair`
 （主AP 立即配对发现的设备；子AP 没连上则回到 unconfigured 等配对）。
@@ -92,33 +82,24 @@
 
 ---
 
-## 5. SSID/密码同步（wifiroamd.uc 补丁）
+## 5. 前台 SSID 和漫游
 
-原版 wifiroam 只下发 k/v/r，不下发 SSID/PSK。补丁内容：
+前台 SSID 按频段同步主 AP 的 SSID、密码和加密；隐藏回传和访客 SSID 不参与。
+从 AP 只在回传就绪时应用，临时回路由时恢复原值，重连后重新同步。相同配置
+不反复重载无线。保留有线 FT bridge socket 修复；无线中继不转发 FT-over-DS 所需
+的二层帧，禁用该方式。
 
-- 主AP：`wifi_export()` 导出每个 AP 频段的 `{ssid,key,encryption,band,isolate}`
-  （排除回传 `wifiroam_bh`），随 `push_roam_config` 一起发送。
-- 子AP：`apply_wifi_from_cap()` 按频段套用 SSID/加密/密码；
-  `gwrt.mesh_apmode.enabled=0` 时忽略（强制路由模式保持自己的 SSID）。
-- 第一次同步前保存 `/etc/gwrt-wireless-orig`（路由模式无线快照）；
-  回滚时恢复原 SSID/密码并删除回传 STA。
-- 路由模式下 `gwrt-mesh-apmode` 持续刷新快照（用户改 SSID 也能记住）。
+## 6. 无线回传
 
-效果：子AP 与主AP 广播同一个 SSID、同一个密码、同一套 k/v/r → 真正的无缝漫游。
-
----
-
-## 6. 无线回传（WDS）
-
-- 子AP 的 STA 配置段：`wireless.wifiroam_bh`
-  （mode=sta, ssid=mesh-gwrt, psk2+ccmp, wds=1, network=lan, 5G radio）
-- 主AP：隐藏 AP `wifiroam_bh`（mode=ap, hidden=1, wds=1）
-- 有线在位时 STA `disabled=1`（避免二层环路）；拔线后自动启用。
-- `gwrt-mesh-apmode` 的 `ensure_backhaul()` 会在配置段缺失时自动创建
-  （不依赖主AP 是否推送成功）。
-- `sta_up()` 把「无线 STA 已连上」也算作已组网，避免拔线瞬间误回滚。
-
----
+- 主 AP 在可用的 2.4/5 GHz 创建隐藏 AP，出厂回传 SSID 为 `mesh-gwrt`。
+  回传使用三地址 STA，避免旧 WDS 在部分设备上的掉线问题。
+- 从 AP 的 STA 不加入 `br-lan`，由 `gwrt_mesh` DHCP 获取管理地址。没有成功记录时默认先试
+  2.4 GHz，也可用 `wifiroam.backhaul.band=5g` 改首选频段。重连优先尝试同一配对最近一次
+  成功的频段，不可用或等不到连接时轮试另一频段。记忆只保留在运行目录，不写入闪存。
+- 通过 procd 直接运行 `relayd`，不依赖本树缺失的 netifd `relay` 协议。普通客户端的
+  IPv4 DHCP、ARP 和流量经过中继，使用主网段，不经从 AP 的 NAT。
+- IPv6 有线透传；无线配置了 odhcpd 的 RA/DHCPv6/NDP 中继，实际效果取决于主网 IPv6 和
+  设备配置。无线中继不是完整二层桥，任意以太网协议和实机漫游连续性不作保证。
 
 ## 7. mesh 状态灯（`gwrt-mesh-led`）
 
@@ -219,25 +200,27 @@ SSID 同步沿用完整的当前 roam 配置，不覆盖用户的 FT、RSSI prof
 
 | 键 | 默认 | 说明 |
 |---|---|---|
-| `gwrt.mesh_apmode.enabled` | 1 | 1=配对后自动变 AP；0=永远保持路由 |
+| `gwrt.mesh_apmode.enabled` | 1 | 1=配对后自动切换回传；0=保持原路由模式 |
+| `gwrt.mesh_apmode.search_seconds` | 120 | 待命搜索时长 |
+| `gwrt.mesh_apmode.router_seconds` | 60 | 临时恢复路由的时长 |
 | `gwrt.mesh_led.leds` | auto | `auto` / `blue:status` / `"red:status green:status"` |
 | `gwrt.mesh_led.enabled` | 1 | 0=关闭状态灯服务 |
 | `gwrt-agent.main.mesh_control` | 1 | 0=拒绝 mesh.* 命令 |
 | `gwrt-agent.main.remote_exec` | 0 | 1=允许重启/改主机名等危险命令 |
 | `wifiroam.core.role` | unconfigured | 当前角色 |
-| `wifiroam.backhaul.ssid/key` | mesh-gwrt / Abc123abc8888 | 回传凭据 |
+| `wifiroam.backhaul.ssid/key` | 固件预设 | 回传凭据，可在主 AP 修改 |
 
 ---
 
 ## 11. 已知限制
 
-1. **首次配对需要 WAN 侧可达**：子AP 用 WAN（或已配对后的无线回传）拿主路由网段的 IP，
-   主AP 才能 TCP 连上它。纯 LAN 口直连且不同网段时无法配对。
-2. **只同步每个频段的主 SSID**：访客 WiFi / 多 SSID 暂不同步。
-3. **主路由改 WiFi 密码后**：下一次漫游配置变化或 APP 执行 `mesh.ssid_sync` 才会重推。
-4. **LED 颜色**：默认蓝灯；如果面板 MESH 图标是绿灯，用 UCI 切换。
-5. **AP 模式停用 10 个插件**（见第 3 节），页面仍可见但显示 Stopped。
-6. **MT7981 桥接 WAN 必须先关 HNAT**，脚本已按顺序处理；手动操作时不要跳过。
+- 有线回传监控设备配置的 WAN 口。首次配对时，客户机需先从主网获取 WAN 或无线地址；
+  把两台未组网设备的普通 LAN 口相连且地址不在同一网段，无法自动配对。
+- 自定义隐藏 SSID/密码的主 AP，首次纯无线配对需要在从 AP 预先配置匹配回传凭据，或先插 WAN 配对。
+  已配对主 AP 更换管理 IP 时，需要更新配对信息。
+- v5 访客网是独立 DHCP/NAT 子网。自动切换模式中不在从 AP 启用该访客网；主 AP 的设置不受影响。
+- 切换会重配网口或无线。现有会话可能短暂中断；两次 DHCP 获得的管理地址不一定相同。
+- MT7981 桥接 WAN 前必须先关 HNAT。控制器按此顺序执行。
 
 ---
 
@@ -264,58 +247,28 @@ ssh root@192.168.3.3 'sysupgrade -n /tmp/su.bin'
 sh scripts/gwrt-sync-mesh.sh /path/to/openwrt
 ```
 
-脚本会复制：
-`package/gwrt-mesh-led`、`package/gwrt-mesh-apmode`、`package/gwrt-device-defaults`、
-`package/gwrt-agent`、`package/gwrt-theme`，以及本文档。
+该脚本会同步所有 `package/gwrt-*` 自定义包以及项目文档、配置生成器和构建脚本。
+只移植本轮回传修改时，用工作日志中的文件清单选择性同步。
 
 ---
 
-## 13. 快速验证清单
+## 13. 验证清单
 
 ```sh
-# 未组网
-uci get wifiroam.core.role                 # unconfigured
-ip -4 addr show br-lan | grep inet         # 192.168.3.3
-uci show wireless | grep ssid=             # GWRT_2.4G_xxxx / GWRT_5.2G_xxxx
-
-# 配对后（主AP 点配对 / 按 MESH 键）
-uci get wifiroam.core.role                 # sap
-ip -4 addr show br-lan | grep inet         # 192.168.x.y（主路由分配）
-uci show wireless | grep ssid=             # 与主AP 相同
-logread | grep -E "wifi sync|state .*-> ok|AP mode ok"
-
-# 强制退出
-/usr/libexec/gwrt-mesh-apmode off
-# → unconfigured / 192.168.3.3 / GWRT_* SSID / 插件恢复 / discover 为空
+/usr/libexec/gwrt-mesh-apmode status       # 模式、IPv4、切换原因、频段、两段等待时间
+ubus call wifiroam mesh_policy            # 当前回传和剩余时间计算所需字段
+uci get wifiroam.core.role                # 自动回退期间仍为 sap
+ubus call network.interface.lan status    # 有线时的主网段管理地址
+ubus call network.interface.gwrt_mesh status  # 无线时的主网段管理地址
 ```
 
----
+实机测试：先无线配对，从主网和从 AP 的客户端访问管理页；插接其他网络的网线，
+确认无线不掉；移动网线到主 AP 的 LAN，验证有线接管；拔线验证无线接替；关闭两条
+回传，观察 120 秒搜索、60 秒原路由再搜索。检查客户端都从主 AP 收到 IPv4 租约，
+以及主 AP 拓扑上的管理链接、回传方式和切换原因是否随回传更新。
+显式退出可用 `/usr/libexec/gwrt-mesh-apmode off`，设备解绑并恢复原路由设置。
 
-## 14. 最终回传策略（261025-43 起）
-
-| 上行 | 模式 | 说明 |
-|---|---|---|
-| **有线（eth1 carrier=1）** | 真 AP | WAN 并入 br-lan、LAN DHCP 取主路由地址、关 10 个插件；无缝漫游 |
-| **无线（无网线）** | 路由/NAT | STA（默认 2.4G，3-addr）在 wwan 拿主路由地址；本机 LAN 保持 192.168.3.3 + DHCP；NAT 出网；SSID 已同步；**没有无缝漫游**（不同网段） |
-| 解绑/掉线 | 回路由 | 恢复原 SSID/密码 + 192.168.3.3 + 插件 |
-
-### 为什么无线不做桥接
-- 4-addr WDS：主AP（JDCloud ath11k）会 `WDS-STA-INTERFACE-ADDED` 后约 40s `REMOVED`，桥接断、DHCP 不通。
-- relayd：本树 netifd 没有 `relay` proto handler（`/lib/netifd/proto/relay.sh` 缺失），`proto relay` 接口建不起来。
-- 因此无线回传采用 **3-addr STA + NAT**，保证“有网”；要无缝漫游请用有线回传。
-
-### 配对阶段
-- 未组网 + 无有线：自动建 **2.4G STA（wds=0，network=wwan）** 连主AP 的 `mesh-gwrt`（主AP 2.4G 隐藏 AP，ch1），拿地址后被 discover。
-- 配对后：`wifiroam_bh` 保持 wds=0/wwan（NAT 用），LAN 回 192.168.3.3 + DHCP。
-- 5G 回传（可选）：`uci set wifiroam.backhaul.band=5g`，主AP 下发 channel，子AP 5G 热点自动对齐（AP+STA 同频）；默认 `auto`→2.4G（最稳）。
-
-### 2026-11-07 稳定性约束
-
-- `wifiroamd` 和 AP 模式辅助进程必须使用同一回传归属：有线在位时停用 STA、归 `lan`；无线 NAT 回传启用 STA、归 `wwan`。比较实际受管 UCI 字段，不能只用上次写入的签名判断已经生效。
-- 重复下发相同 SSID、K/V/R 或回传配置不能重复 reload 无线；版本号变化本身不代表无线配置变化。
-- BTM 仅对存在同 SSID、新鲜且已认证的在线有线回传邻居的终端发送建议，不设置强制离站计时。无线 NAT 子 AP 停止主动引导，不启用跨网段 FT/K/V；无线 NAT 回传仍不是同一二层网络，不支持无缝漫游。
-- 已运行的有线 AP 在控制面短暂失联时，仅当保留 `sap` 角色、有效管理地址、有线 carrier 和到 CAP 的数据面探测均正常，才继续保留桥接；显式解绑仍应恢复路由模式。
-- 切换 AP 模式可能重建 `br-lan`。若 hostapd 的 RRB (`0x890d`) 或共享 OUI (`0x88b7`) raw socket 因此绑定到已删除接口（`/proc/net/packet` 中 Iface=-1），需释放相关 FT BSS 后一起重新启动，不能只 reload 相同配置或逐频段 down/up。对相同 bridge/socket 签名最多自动尝试一次，避免周期性踢客。
-- AP 模式快照应保存原 LAN/WAN 地址、掩码、网关、DNS list、选项原始存在性和 WAN 原桥成员关系，回退时完整恢复；旧版快照未保存的值不能用空值覆盖现有合法配置。
-
-现场证据与验证记录见 `docs/WORKLOG-20261107-dashboard-mesh-stability.md`。
+研发测试：`scripts/tests/test-gwrt-backhaul.py` 驱动 UCI/切换状态，
+`test-gwrt-wifiroam.py` 在目标 ucode 检查两版插件及实际 UDP 入接口，
+`test-gwrt-relay-netns.sh` 检查隔离环境的 DHCP、管理与数据面，
+`test-gwrt-mesh-topology.cjs` 用 Chrome 检查两个版本的拓扑详情和管理链接。

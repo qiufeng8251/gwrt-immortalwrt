@@ -73,3 +73,70 @@
 - 因此未执行 `git push`，也未新建 remote；本地已就绪：`package/gwrt-luci-app-pon-info/`（新增）、`gwrt-mk-an7581-config.sh`（+1 行）、
   `AGENTS.md`、本工作日志。网络恢复后直接：
   `git remote add gwrt https://rothdren-lion@github.com/rothdren-lion/gwrt-immortalwrt.git`（或复用已有导出树）→ commit → `git push gwrt master`。
+
+## 2026-11-18 下午复核与修正
+
+以只读方式复核凌晨成果，结论：插件本体完整可用，补两处缺口、修一处缺陷。
+
+### 复核通过项
+
+| 检查 | 结果 |
+| --- | --- |
+| 包文件齐全 | `package/gwrt-luci-app-pon-info/luci-app-pon-info/` 共 10 个文件（含 README），35K，无缺件 |
+| ucode 语法 | 用宿主解释器 `/home/godsun/build/gwrt-startup-opt-261117-evidence/host-ucode/ucode` 实编译：`pon-info` 与 `luci.pon-info` 均 exit=0 无告警 |
+| JS 语法 | `node --check` 通过（319 行） |
+| JSON 合法性 | `menu.d` 与 `acl.d` 两个 JSON 均解析通过（`/etc/config/poninfo` 是 UCI 格式，非 JSON） |
+| shell 语法 | `init.d/poninfo` 与 `libexec/pon-info-recorder` 均 `bash -n` 通过 |
+| 包名冲突 | `feeds/luci/applications` 无 `pon-info` 同名包，不冲突 |
+| 依赖可得 | `feeds/luci/luci.mk` 存在；`LUCI_DEPENDS` 的 ucode/rpcd/rpcd-mod-ucode/ucode-mod-fs 为系统包 |
+| fs 模块能力 | `fs.so` 确实导出 `glob`、`popen`、`mkdir`（`nm -D` 核对） |
+
+### 修正一：TYFZA1 配置生成器漏选本包（真实阻断）
+
+插件的实机目标是 TYFZA1（`tianyi,tyfza1`，192.168.1.1），但凌晨只把 `luci-app-pon-info` 加进了
+`gwrt-mk-an7581-config.sh`，`gwrt-mk-tyfza1-config.sh` 的「PON 用户态」列表里没有它
+（`grep -c luci-app-pon-info` = 0）。结果：即使编译成功，TYFZA1 固件里也不会有这个包，
+设备上"手动部署可用、固件内不可用"。
+已在 `gwrt-mk-tyfza1-config.sh` 的 PON 用户态列表补入 `luci-app-pon-info`；脚本末尾 `PON:` 汇总
+的正则前缀 `luci-app-pon` 已能覆盖，无需再改。两个生成器 `bash -n` 均通过。
+
+### 修正二：状态目录不自建（运行时静默失败）
+
+`/etc/poninfo` 原先只由 `init.d/poninfo` 的 `mkdir -p` 创建。若用户禁用采样服务（`enabled=0`），
+却仍在页面点「立即采样」，`record` 写 `/etc/poninfo/history.jsonl.new` 会因目录不存在而失败，
+且脚本不检查 `writefile` 返回值 → 静默无响应。
+已改由采集器自建：新增 `ensure_state_dir()`（`mkdir(STATE)`，目录已存在时返回 null 且不报错，
+故无需先探测——实测 `exists()` 对路径恒返回 false，不可用），在 `record()`、`write_history()`、
+`clear_history()` 三处写盘前调用。
+
+### 修正三：清理空目录残留
+
+`package/luci-app-pon-info/` 是凌晨的废弃空壳（仅含空的 `files/` 子目录，0 文件、无任何引用），
+与真正的 `package/gwrt-luci-app-pon-info/` 名字相近易混，已删除。
+
+### 冒烟测试（宿主 ucode，非实机）
+
+把 `STATE`/`CONFIG` 改写到本地目录后实跑：
+
+| 用例 | 期望 | 实测 |
+| --- | --- | --- |
+| 目录不存在时 `record` | 自建目录并写入 | `{"appended":true,...}`，目录已生成 |
+| 紧接着第二次 `record` | 判重不追加 | `{"appended":false,...}`，记录数不变 |
+| `clear` | 清空 | `{"cleared":true}` |
+| `history 3` | 返回数组 | `[]`（清空后正确） |
+| `json` | 输出全量 JSON | 正常，含 backend/device 等顶层键 |
+| `history.jsonl` | 每行独立 JSON | 1 行，`json.loads` 通过 |
+| `latest.json` | 合法 JSON | `json.load` 通过 |
+
+### 本轮未做 / 待办
+
+- **未在实机复测**：`192.168.1.1` 当前 ping 100% 丢包（离线），`record/clear` 的目录自建逻辑
+  只在宿主环境验证过，需设备恢复后按上表复测。
+- **未编译固件、未推送 GitHub**：本次只改工作树，未 commit、未 push。GitHub 通路本轮
+  时通时不通（`gh api` 曾返回 Bad Gateway），推送待网络稳定后按上文命令执行。
+- **本地无法 defconfig**：本 NAS 树的 `scripts/config/conf` 未预编译（只有 `.c` 源码），
+  且工作目录路径含 `:`（gvfs SMB 挂载 `smb-share:server=...`）会让 make 的 `include` 解析异常，
+  `make defconfig` 直接报「没有规则可制作目标 defconfig」。该树不是完整可编译树，
+  固件编译需走云端/无冒号路径的导出树。
+- **未补 i18n**：页面与菜单标题为中文硬编码，与树内同类 `luci-app-pon-wan` 做法一致，不单独拆 po。
+

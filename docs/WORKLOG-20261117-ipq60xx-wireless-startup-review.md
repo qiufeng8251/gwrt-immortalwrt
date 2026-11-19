@@ -20,7 +20,7 @@
 ### 2.2 两套频段判定冲突
 
 - `package/gwrt-device-defaults/files/gwrt-ssid-name:45` 按配置的信道数值命名 5G：低于 149 为 5.2G，否则为 5.8G。
-- `package/gwrt-theme/luci-theme-gwrt/root/lib/functions/gwrt-wireless.sh:14` 按硬件路径将 AHB `c000000.wifi` 定义为 5.8G；`:15` 将 PCIe QCN9074 定义为 5.2G。
+- `package/gwrt-theme/luci-theme-gwrt/root/lib/functions/gwrt-wireless.sh:14` 按硬件路径将 AHB `c000000.wifi` 定义为 5.8G；`:15` 将 PCIe QCN9074 定义为 5.2G。该 PCIe 规则只对有外挂 QCN9074 的 CS-02/CS-07 生效；SS-01 无 QCN9074，两频都在 AHB（实测 `phy0`/`phy1` 均挂 `c000000.wifi`）。
 - `95_gwrt-wifi-defaults` 对非 SS-01 的两个 5G radio 都写 ch36。结果是同一个 AHB 射频，按信道的 helper 写 `GWRT_5.2G_<MAC4>`，主题 hook 写 `GWRT_5.8G_<MAC4>`；事件时序不同会覆盖名称。只去掉一个 `--reload` 没有解决这一冲突。
 
 此前建议“AHB ch36 / PCIe ch149”与本项目频段定义相反，应撤回。后续必须按机型、硬件路径和实际支持的频率确认；不能用 radio0/radio1 顺序硬编码。
