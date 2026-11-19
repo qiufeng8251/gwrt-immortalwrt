@@ -6,7 +6,7 @@ include $(TOPDIR)/rules.mk
 
 PKG_NAME:=gwrt-device-defaults
 PKG_VERSION:=1.0
-PKG_RELEASE:=8
+PKG_RELEASE:=10
 PKG_LICENSE:=GPL-2.0
 
 include $(INCLUDE_DIR)/package.mk
@@ -15,7 +15,7 @@ define Package/gwrt-device-defaults
   SECTION:=base
   CATEGORY:=Base system
   TITLE:=GWRT cross-platform first-boot defaults
-  DEPENDS:=+jshn +gwrt-wifi-defaults +gwrt-emmc-storage
+  DEPENDS:=+jshn +gwrt-wifi-defaults +gwrt-emmc-storage +ucode-mod-struct
   PKGARCH:=all
 endef
 
@@ -40,6 +40,7 @@ define Package/gwrt-device-defaults/install
 # 预置离线 apk：wifiroam 三件是纯脚本，全架构通用，常装；
 # ucode-mod-socket 仅 aarch64 目标附带（mipsel 等由 ucode 包直接编入固件）。
 	$(INSTALL_BIN) ./files/96_gwrt-preset-apk $(1)/etc/uci-defaults/96_gwrt-preset-apk
+	$(INSTALL_BIN) ./files/96_gwrt-lite-panels $(1)/etc/uci-defaults/96_gwrt-lite-panels
 	$(INSTALL_BIN) ./files/97_gwrt-wifiroam-defaults $(1)/etc/uci-defaults/97_gwrt-wifiroam-defaults
 	$(INSTALL_BIN) ./files/98_gwrt-agent-defaults $(1)/etc/uci-defaults/98_gwrt-agent-defaults
 	$(INSTALL_BIN) ./files/99_gwrt-data-part $(1)/etc/uci-defaults/99_gwrt-data-part
@@ -54,7 +55,8 @@ endif
 	$(INSTALL_BIN) ./files/gwrt-wifiroam-autopair $(1)/usr/libexec/gwrt-wifiroam-autopair
 	$(INSTALL_BIN) ./files/gwrt-wifiroam-autopair.init $(1)/etc/init.d/gwrt-wifiroam-autopair
 	$(INSTALL_DATA) ./files/wifiroam/*.js $(1)/usr/share/gwrt/wifiroam/
-	$(INSTALL_DATA) ./files/wifiroam/wifiroamd.uc $(1)/usr/share/gwrt/wifiroam/wifiroamd.uc
+	$(INSTALL_DATA) ./files/wifiroam/*.uc ./files/wifiroam/wifiroam.css \
+		./files/wifiroam/backhaul-acl.json $(1)/usr/share/gwrt/wifiroam/
 	$(INSTALL_DATA) ./files/wifiroam/menu.json $(1)/usr/share/gwrt/wifiroam/menu.json
 	$(INSTALL_DATA) ./files/wifiroam.default-config $(1)/usr/share/gwrt/wifiroam/default-config
 endef

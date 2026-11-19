@@ -178,6 +178,18 @@ for p in \
 	add_pkg "$p"
 done
 
+# 流量统计与网页终端。两者的默认值由 gwrt-device-defaults 的
+# files/96_gwrt-lite-panels 写入：bandix 只统计 br-lan（8787），
+# ttyd 只监听 LAN（7681，/bin/login）。
+echo "[tyfza1] 进阶面板（bandix 流量统计 + ttyd 终端）:"
+for p in \
+	bandix-plus \
+	luci-app-bandix-plus \
+	ttyd \
+	luci-app-ttyd ; do
+	add_pkg "$p"
+done
+
 echo "[tyfza1] 主题（与整个项目同一版本）:"
 add_pkg luci-theme-gwrt
 
@@ -202,10 +214,6 @@ for p in \
 	kmod-wireguard \
 	kmod-nft-tproxy \
 	kmod-inet-diag \
-	luci-app-bandix-plus \
-	bandix-plus \
-	luci-app-ttyd \
-	ttyd \
 	luci-theme-argon ; do
 	unset_pkg "$p"
 done
@@ -233,6 +241,7 @@ echo "==> 无线: $(grep -E '^CONFIG_PACKAGE_(kmod-rtl-ax-ap|wpad-mbedtls|wifi-s
 echo "==> PON:  $(grep -E '^CONFIG_PACKAGE_(tyfza1|luci-app-tyfza1|luci-app-pon)' "$OUT" | tr '\n' ' ')"
 echo "==> 主题: $(grep -E '^CONFIG_PACKAGE_luci-theme-gwrt=y$' "$OUT" || echo '缺失')"
 echo "==> honk: $(grep -E '^CONFIG_PACKAGE_(honk|luci-app-honk|vmlinux-btf)' "$OUT" | tr '\n' ' ')"
+echo "==> 进阶: $(grep -E '^CONFIG_PACKAGE_(bandix-plus|luci-app-bandix-plus|ttyd|luci-app-ttyd)=y$' "$OUT" | tr '\n' ' ')"
 echo "==> 冲突检查（应为空）: $(grep -E '^CONFIG_PACKAGE_(kmod-mac80211|kmod-cfg80211)=y$' "$OUT" || true)"
 cat <<'EOF'
 
