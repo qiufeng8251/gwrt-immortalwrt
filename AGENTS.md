@@ -38,6 +38,14 @@ f146faa08d 修复）。另按用户要求新增 AN758x 专属构建工作流
 device 固定 an758x，运行名 an758x-<版本>）；注意包装层顶层 concurrency
 组名不能与 callee 相同（嵌套同组会秒失败且无 job/日志），当前构建
 run 44644876664 / commit 1cb1a31468db。
+2026-11-20 AN7581 IPv6 PPPoE PPE 卸载根治补丁移植：集成
+wuziwei/ponwrt-ZN504-HG5585F 的 931-net-airoha-fix-wan-ipv6-pppoe-flow-offload
+（4 项修复：foe_insert_entry 阻断路由 L3 跌入网桥子流 / 保留
+AIROHA_FOE_MAC_PPPOE_ID / AN7581 IPv6 条目豁免 NPU 计数器 / WAN MTU0/MTU1+16
+预算）。内核补丁 source of truth 已在远端仓库（6.18.62/164 补丁链；NAS 树为
+6.18.55 旧链勿动）。上游补丁 hunk 计数有误，已按 GWRT 基线用重建源
+（6.18.62 tarball + 74 个 airoha 补丁）重新生成并在其上验证。已触发
+261120-03 构建（run 44707204533，commit 4e0ea36193bc）。
 
 2026-11-19 Mesh 回传优化：已组网的有线漏收广播时，核对载波、掉线计数、桥和租约后，
 从 LAN 桥限时探测已配对主 AP；连续失败才回退，新接线仍走原配对检查。重连优先试本次
