@@ -7,6 +7,7 @@ run-name: ${{ format('an758x-{0}', inputs.version || format('run{0}', github.run
 # 复用 gwrt-build.yml 的完整流水线（feeds / 配置生成 gwrt-mk-an7581-config.sh /
 # 源码预检 / 编译 / 镜像收集），device 固定为 an758x，本文件只做入口，
 # 让 AN758x 序列在 Actions 列表里单独显示、单独管理。
+# 并发串行由 gwrt-build.yml 自身的 concurrency（gwrt-build-an758x）保证。
 
 on:
   workflow_dispatch:
@@ -24,17 +25,11 @@ on:
 permissions:
   contents: write
 
-concurrency:
-  group: gwrt-build-an758x
-  cancel-in-progress: false
-
 jobs:
   build:
-    name: AN758x firmware
     uses: ./.github/workflows/gwrt-build.yml
     with:
       device: an758x
       version: ${{ inputs.version }}
       images: flashable
       release: ${{ inputs.release }}
-    secrets: inherit
