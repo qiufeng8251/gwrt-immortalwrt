@@ -46,6 +46,11 @@ AIROHA_FOE_MAC_PPPOE_ID / AN7581 IPv6 条目豁免 NPU 计数器 / WAN MTU0/MTU1
 6.18.55 旧链勿动）。上游补丁 hunk 计数有误，已按 GWRT 基线用重建源
 （6.18.62 tarball + 74 个 airoha 补丁）重新生成并在其上验证。已触发
 261120-03 构建（run 44707204533，commit 4e0ea36193bc）。
+2026-11-20 仪表盘 SoC 显示改用 AN758x 商品名：gwrt-socinfo（双副本）compatible
+匹配优先 `airoha,an[0-9]*`，machine 串接受 an[0-9]*，en7581/en7583 输出映射为
+an7581/an7583（与插件页 socLabel 一致）；test-gwrt-socinfo.sh 增加三个用例。
+已热更 192.168.3.3 验证输出 an7581*4（scp 的 sftp 子系统被 dropbear 拒绝，
+改 ssh 管道直传）。
 
 2026-11-19 Mesh 回传优化：已组网的有线漏收广播时，核对载波、掉线计数、桥和租约后，
 从 LAN 桥限时探测已配对主 AP；连续失败才回退，新接线仍走原配对检查。重连优先试本次
