@@ -153,7 +153,7 @@
 	</div>
 </div>
 
-<script src="/luci-static/gwrt/resources/router-models.js?v=20261118r123"></script>
+<script src="/luci-static/gwrt/resources/router-models.js?v=20261119r126"></script>
 <script>
 (function(){
 function S(id,t){var e=document.getElementById(id);if(e)e.textContent=t;}
@@ -2484,7 +2484,8 @@ function renderMeshSummary(){
     +'<button type="button" class="gwrt-mesh-manage">管理 Mesh</button>'
     +(devices.length?'<div class="gwrt-mesh-discovery"><span>局域网发现 '+devices.length+' 台待添加 AP</span>'+devices.map(function(d){
       var key=gwrtMeshNodeKey(d),busy=!!gwrtMeshPending[key];
-      return '<div class="gwrt-mesh-discovered"><span><strong>'+esc(d.name||d.model||'GWRT AP')+'</strong><small>'+esc(d.ip||d.mac||'')+(d.model?' · '+esc(d.model):'')+'</small></span>'
+      return '<div class="gwrt-mesh-discovered"><span class="gwrt-mesh-discovered-device">'+gwrtProductIcon(d,'')
+        +'<span><strong>'+esc(d.name||d.model||'GWRT AP')+'</strong><small>'+esc(d.ip||d.mac||'')+(d.model?' · '+esc(d.model):'')+'</small></span></span>'
         +'<button type="button" data-gwrt-mesh-add="'+key+'"'+(busy?' disabled':'')+'>'+(busy?'等待入网…':'添加')+'</button></div>';
     }).join('')+'</div>':'');
   el.querySelector('.gwrt-mesh-manage').onclick=function(){gwrtOpenModal('/cgi-bin/luci/admin/services/wifiroam/pairing','Mesh 配对');};
@@ -2670,27 +2671,45 @@ function renderPonPanel(){
   var modeEl=document.getElementById('gwrtPonPanelMode');
   if(modeEl)modeEl.textContent=ponModeLabel(line.active_mode||line.configured_mode||'');
   var statusEl=document.getElementById('gwrtPonPanelStatus');
-  if(statusEl)statusEl.textContent=pon?ponStatusText(pon):'\u5149\u6a21\u5757\u72b6\u6001\u8bfb\u53d6\u5931\u8d25\uff08ponctl \u4e0d\u53ef\u7528\u6216 pon0 \u672a\u542f\u52a8\uff09';
+  if(statusEl){
+    var txt=pon?ponStatusText(pon):'\u5149\u6a21\u5757\u72b6\u6001\u8bfb\u53d6\u5931\u8d25\uff08ponctl \u4e0d\u53ef\u7528\u6216 pon0 \u672a\u542f\u52a8\uff09';
+    var cls='idle';
+    if(!pon)cls='warn';
+    else if(line.lifecycle==='operational'&&(reg.onu_state==='O5'||reg.mpcp_state==='registered'))cls='ok';
+    else if(!line.optical_signal||(reg.onu_state&&reg.onu_state!=='O5'))cls='warn';
+    statusEl.className='gwrt-pon-status '+cls;
+    statusEl.innerHTML='<span class="dot"></span>'+esc(txt);
+  }
+  var dim=(!line.optical_signal)?' muted':'';
+  var onuCls=(reg.onu_state==='O5')?' ok':(reg.onu_state?' warn':' muted');
   var rows=[
-    ['\u63a5\u6536\u5149\u529f\u7387',ponMetricText(fe,'rx_power_dbm',2,'dBm')],
-    ['\u53d1\u9001\u5149\u529f\u7387',ponMetricText(fe,'tx_power_dbm',2,'dBm')],
-    ['\u6a21\u5757\u6e29\u5ea6',ponMetricText(fe,'temperature_celsius',1,'\u00b0C')],
-    ['\u5de5\u4f5c\u7535\u538b',ponMetricText(fe,'voltage_volts',2,'V')],
-    ['TX Bias',ponMetricText(fe,'tx_bias_ma',1,'mA')],
-    ['ONU \u72b6\u6001',ponOnuLabel(reg.onu_state)],
-    ['MPCP \u72b6\u6001',ponMpcpLabel(reg.mpcp_state)],
-    ['ONU ID',reg.onu_id!=null?String(reg.onu_id):'--']
+    {s:'\u5149\u6a21\u5757',items:[
+      ['\u63a5\u6536\u5149\u529f\u7387',ponMetricText(fe,'rx_power_dbm',2,'dBm'),dim],
+      ['\u53d1\u9001\u5149\u529f\u7387',ponMetricText(fe,'tx_power_dbm',2,'dBm'),dim],
+      ['\u6a21\u5757\u6e29\u5ea6',ponMetricText(fe,'temperature_celsius',1,'\u00b0C'),''],
+      ['\u5de5\u4f5c\u7535\u538b',ponMetricText(fe,'voltage_volts',2,'V'),''],
+      ['TX Bias',ponMetricText(fe,'tx_bias_ma',1,'mA'),dim]
+    ]},
+    {s:'\u6ce8\u518c\u72b6\u6001',items:[
+      ['ONU \u72b6\u6001',ponOnuLabel(reg.onu_state),onuCls],
+      ['MPCP \u72b6\u6001',ponMpcpLabel(reg.mpcp_state),(reg.mpcp_state==='not-applicable')?' muted':''],
+      ['ONU ID',reg.onu_id!=null?String(reg.onu_id):'--',reg.onu_id!=null?'':' muted']
+    ]}
   ];
-  el.innerHTML=rows.map(function(r){return '<div><span>'+esc(r[0])+'</span><b>'+esc(r[1])+'</b></div>';}).join('');
+  el.innerHTML=rows.map(function(sec){
+    return '<div class="gwrt-pon-section">'+sec.s+'</div><div class="gwrt-pon-grid">'
+      +sec.items.map(function(r){return '<div><span class="k">'+esc(r[0])+'</span><b class="v'+(r[2]||'')+'">'+esc(r[1])+'</b></div>';}).join('')
+      +'</div>';
+  }).join('');
   var traffic=document.getElementById('gwrtPonTraffic');
   if(!traffic)return;
   var st=(window._gwrtPortStates||{})[p.name]||{},stat=st.statistics||{};
   var rx=Number(stat.rx_bytes||0),tx=Number(stat.tx_bytes||0);
   var prev=portPrev[p.name],dt=prev?(Date.now()-prev.ts)/1000:0,drx=0,dtx=0;
   if(prev&&dt>0&&dt<30){drx=Math.max(0,rx-prev.rx)/dt;dtx=Math.max(0,tx-prev.tx)/dt;}
-  traffic.innerHTML='<div class="gwrt-pon-traffic-row"><span>\u672c\u6b21\u8fd0\u884c</span><b>\u2193 '+esc(F(rx))+' \u00b7 \u2191 '+esc(F(tx))+'</b></div>'
-    +'<div class="gwrt-pon-traffic-row"><span>\u5b9e\u65f6\u901f\u7387</span><b>\u2193 '+esc(fmtSpeed(drx))+' \u00b7 \u2191 '+esc(fmtSpeed(dtx))+'</b></div>'
-    +'<div class="gwrt-pon-traffic-row"><span>XGEM \u5e27</span><b>RX '+esc(ctr.xgem_rx!=null?String(ctr.xgem_rx):'--')+' \u00b7 TX '+esc(ctr.xgem_tx!=null?String(ctr.xgem_tx):'--')+'</b></div>';
+  traffic.innerHTML='<div class="gwrt-pon-traffic-row"><span class="k">\u672c\u6b21\u8fd0\u884c</span><b class="v">\u2193 '+esc(F(rx))+' \u00b7 \u2191 '+esc(F(tx))+'</b></div>'
+    +'<div class="gwrt-pon-traffic-row"><span class="k">\u5b9e\u65f6\u901f\u7387</span><b class="v">\u2193 '+esc(fmtSpeed(drx))+' \u00b7 \u2191 '+esc(fmtSpeed(dtx))+'</b></div>'
+    +'<div class="gwrt-pon-traffic-row"><span class="k">XGEM \u5e27</span><b class="v">RX '+esc(ctr.xgem_rx!=null?String(ctr.xgem_rx):'--')+' \u00b7 TX '+esc(ctr.xgem_tx!=null?String(ctr.xgem_tx):'--')+'</b></div>';
 }
 function togglePonWanFields(proto){
   var ppp=proto==='pppoe',st=proto==='static';
@@ -3726,7 +3745,17 @@ function refresh(){
     var npuRow=document.getElementById('gwrtNpuRow');
     if(npuRow){
       npuRow.style.display=npuDetected?'':'none';
-      if(npuDetected){S('gwrtNpu','已识别');setUsageBar('gwrtNpuBar',100);}
+      if(npuDetected){
+        /* PPE 流表绑定条目 = 经硬件(NPU/PPE)卸载的转发流。显示真实转发
+         * 条目数与流表占用；helper 缺失/不可读时退回“已识别”。 */
+        rpcD('file','exec',{command:'/usr/libexec/gwrt-ppe-stats',params:[]}).then(function(ps){
+          var d=null;try{d=JSON.parse(String((ps&&ps.stdout)||''));}catch(e){}
+          if(!d||!d.available){S('gwrtNpu','\u5df2\u8bc6\u522b');setUsageBar('gwrtNpuBar',100);return;}
+          var used=Number(d.used||0),cap=Number(d.capacity||0);
+          S('gwrtNpu',used+'\u6761'+(cap>0?' / '+cap:''));
+          setUsageBar('gwrtNpuBar',cap>0?Math.min(100,Math.round(used/cap*100)):100);
+        }).catch(function(){S('gwrtNpu','\u5df2\u8bc6\u522b');setUsageBar('gwrtNpuBar',100);});
+      }
     }
     var accTitle=document.getElementById('gwrtAccelCardTitle');
     if(accTitle){

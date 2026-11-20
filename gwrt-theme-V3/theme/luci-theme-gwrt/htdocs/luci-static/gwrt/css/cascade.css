@@ -768,6 +768,31 @@ body::before{content:"";position:fixed;inset:0;z-index:20000;pointer-events:none
 .gwrt-port.pon .gwrt-pon-meta{font-size:9.5px;gap:6px}
 .gwrt-port.pon .gwrt-pon-state{font-size:9px}
 
+/* PON 光链路面板：状态徽章 / 遥测网格 / 流量行 */
+.gwrt-pon-panel{width:min(720px,94vw)}
+.gwrt-pon-badge{font-size:10px;font-weight:700;letter-spacing:.4px;padding:2px 9px;border-radius:999px;background:color-mix(in srgb,var(--accent-primary) 14%,transparent);color:var(--accent-primary);white-space:nowrap}
+.gwrt-pon-status{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;padding:9px 12px;border-radius:var(--radius-lg);margin:2px 0 10px}
+.gwrt-pon-status .dot{width:8px;height:8px;border-radius:50%;flex:none;background:currentColor;box-shadow:0 0 0 3px color-mix(in srgb,currentColor 18%,transparent)}
+.gwrt-pon-status.ok{color:#22c55e;background:color-mix(in srgb,#22c55e 12%,transparent)}
+.gwrt-pon-status.warn{color:var(--accent-warning);background:color-mix(in srgb,var(--accent-warning) 12%,transparent)}
+.gwrt-pon-status.idle{color:var(--text-secondary);background:var(--bg-tertiary)}
+.gwrt-pon-status.idle .dot{opacity:.55;box-shadow:none}
+.gwrt-pon-section{font-size:11px;font-weight:700;letter-spacing:.5px;color:var(--text-tertiary);margin:12px 0 6px;text-transform:uppercase}
+.gwrt-pon-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px}
+.gwrt-pon-grid>div{display:flex;align-items:baseline;justify-content:space-between;gap:10px;background:var(--bg-tertiary);border:1px solid var(--border-primary);border-radius:var(--radius-lg);padding:8px 12px;min-width:0}
+.gwrt-pon-grid .k{font-size:12px;color:var(--text-secondary);white-space:nowrap;flex:none}
+.gwrt-pon-grid .v{font-size:13px;font-weight:700;color:var(--text-primary);font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.gwrt-pon-grid .v.ok{color:#22c55e}
+.gwrt-pon-grid .v.warn{color:var(--accent-warning)}
+.gwrt-pon-grid .v.muted{color:var(--text-tertiary);font-weight:600}
+.gwrt-pon-traffic{display:grid;gap:6px;margin-top:10px}
+.gwrt-pon-traffic-row{display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--bg-tertiary);border:1px solid var(--border-primary);border-radius:var(--radius-lg);padding:7px 12px}
+.gwrt-pon-traffic-row .k{font-size:12px;color:var(--text-secondary);white-space:nowrap}
+.gwrt-pon-traffic-row .v{font-size:13px;font-weight:700;color:var(--text-primary);font-variant-numeric:tabular-nums;white-space:nowrap}
+.gwrt-pon-note{font-size:12px;line-height:1.6;color:var(--text-secondary);background:var(--bg-tertiary);border-radius:var(--radius-lg);padding:9px 12px;margin:12px 0 0}
+.gwrt-pon-note code{font-size:11px;padding:1px 5px;border-radius:6px;background:var(--bg-card);color:var(--text-primary)}
+.gwrt-pon-links{margin:10px 0 0;font-size:13px}
+
 /* Embedded LuCI pages use the whole frame and retain their native actions. */
 body.gwrt-embedded:not(.gwrt-embedded-harbor){zoom:.9}
 body.gwrt-embedded .main > .main-right{margin-left:0!important;width:100%!important;max-width:100%!important;padding-top:0!important;min-width:0!important}
@@ -842,14 +867,36 @@ body[data-page="admin-system-package-manager"] #packages .cbi-section-actions .b
 @media(max-width:900px){.gwrt-navbar-traffic{padding-left:2px}.gwrt-navbar-period{gap:1px;padding:0 2px}.gwrt-navbar-period b{font-size:.55rem}}
 @media(max-width:720px){.gwrt-navbar-traffic{flex-wrap:wrap;row-gap:1px}.gwrt-navbar-period{padding:0 3px}}
 .gwrt-wan-trend{background:transparent}
-.gwrt-product-art{display:inline-flex;width:32px;height:32px;flex:0 0 auto;align-items:center;justify-content:center}
-.topo-node.router .topo-icon>.gwrt-product-art{width:40px;height:40px}
-.gwrt-mesh-ap-icon>.gwrt-product-art{width:100%;height:100%}
-.gwrt-router-product{display:block;width:100%;height:100%;max-width:100%;object-fit:contain;filter:none!important}
+.gwrt-product-art{display:inline-flex;width:38px;height:32px;flex:0 0 auto;align-items:center;justify-content:center}
+.topo-node.router .topo-icon>.gwrt-product-art,.gwrt-mesh-ap-icon>.gwrt-product-art{width:56px;height:40px}
+.gwrt-router-product{display:block;width:auto;height:auto;max-width:100%;max-height:100%;filter:none!important}
 .gwrt-router-product[hidden],.gwrt-product-fallback[hidden]{display:none!important}
 .gwrt-product-fallback{display:inline-flex;align-items:center;justify-content:center;width:100%;height:100%}
-.topo-dev-icon .gwrt-product-art{width:28px;height:28px}
-.gwrt-mesh-ap-icon:has(.gwrt-router-product:not([hidden])){border-color:transparent}
+.topo-dev-icon .gwrt-product-art{width:36px;height:28px}
+.gwrt-mesh-discovered-device{display:flex;align-items:center;gap:6px;min-width:0}
+.gwrt-mesh-discovered-device>.gwrt-product-art{width:36px;height:28px}
+.gwrt-mesh-discovered-device>span:last-child{min-width:0;overflow-wrap:anywhere}
+.gwrt-mesh-ap-icon:has(.gwrt-router-product:not([hidden])){width:56px;border:0;border-radius:0;background:none;box-shadow:none}
+
+/* Follow the chassis and antennas so the original photos work on either theme. */
+.gwrt-router-product[src$="/jdcloud-re-cs-03.png"]{
+  clip-path:polygon(2.02% 73.58%, 4.8% 72.02%, 34.85% 62.18%, 35.86% 6.22%, 36.11% 2.85%, 37.63% 1.55%, 39.65% 1.81%, 40.4% 3.63%, 40.91% 62.18%, 49.49% 64.51%, 49.49% 7.51%, 50% 4.15%, 51.52% 3.11%, 53.54% 3.37%, 54.29% 5.7%, 54.55% 65.8%, 77.53% 71.24%, 79.04% 8.81%, 79.8% 6.74%, 81.31% 6.22%, 82.83% 6.48%, 83.08% 8.55%, 82.32% 72.54%, 91.41% 74.87%, 94.7% 10.36%, 95.45% 8.55%, 97.22% 7.77%, 98.48% 8.55%, 98.48% 12.69%, 97.22% 77.98%, 95.45% 80.31%, 94.7% 84.97%, 92.17% 89.12%, 73.23% 97.93%, 68.18% 99.74%, 63.64% 99.22%, 9.34% 87.82%, 4.29% 85.23%, 2.27% 83.16%);
+}
+.gwrt-router-product[src$="/h3c-nx30pro.png"]{
+  clip-path:polygon(0.34% 46.86%, 2.03% 46.03%, 1.69% 9.21%, 2.03% 5.44%, 3.39% 2.93%, 7.46% 2.09%, 10.17% 3.35%, 11.53% 6.28%, 11.86% 46.03%, 21.02% 46.03%, 20.68% 9.21%, 21.69% 4.6%, 23.73% 2.09%, 27.46% 2.09%, 29.49% 4.18%, 30.51% 7.95%, 30.51% 46.03%, 43.39% 46.03%, 43.39% 7.95%, 44.75% 3.35%, 47.12% 1.67%, 50.51% 2.09%, 52.54% 4.6%, 53.56% 7.95%, 53.56% 46.03%, 66.44% 46.03%, 66.44% 7.95%, 67.8% 3.35%, 70.17% 1.67%, 73.22% 2.09%, 75.25% 5.02%, 76.27% 8.79%, 76.61% 46.03%, 85.76% 46.03%, 85.76% 7.95%, 87.12% 3.77%, 89.83% 2.09%, 92.88% 2.51%, 94.92% 5.44%, 95.93% 9.62%, 95.93% 45.61%, 97.97% 47.28%, 98.64% 51.46%, 98.64% 76.15%, 96.61% 85.36%, 97.63% 92.89%, 95.93% 96.23%, 88.14% 97.91%, 8.47% 97.91%, 2.37% 96.23%, 1.02% 93.31%, 1.36% 87.03%, 0% 84.1%);
+}
+.gwrt-router-product[src$="/hg5585f.png"]{
+  clip-path:polygon(11.56% 53.4%, 9.86% 13.61%, 10.54% 11.56%, 13.27% 10.54%, 14.97% 11.22%, 16.33% 14.29%, 18.03% 61.9%, 32.31% 57.48%, 45.58% 53.4%, 65.31% 49.32%, 67.01% 46.94%, 68.03% 0%, 72.11% 0%, 72.79% 47.62%, 78.57% 47.96%, 83.67% 50%, 87.76% 55.1%, 94.9% 63.61%, 98.3% 69.39%, 98.64% 74.15%, 97.28% 82.31%, 91.84% 86.39%, 48.64% 99.66%, 40.48% 100%, 34.01% 97.96%, 26.53% 91.84%, 21.09% 83.67%, 18.03% 75.85%, 16.33% 69.05%, 13.27% 66.33%);
+}
+.gwrt-router-product[src$="/jdcloud-re-cs-05.png"]{
+  clip-path:polygon(5.51% 84.15%, 8.47% 63.39%, 11.02% 59.02%, 10.59% 10.38%, 11.44% 7.1%, 12.71% 6.01%, 15.25% 6.56%, 16.1% 9.84%, 16.1% 57.92%, 26.27% 57.92%, 26.27% 10.38%, 26.69% 7.1%, 28.81% 6.01%, 30.51% 6.56%, 31.78% 9.84%, 31.36% 57.92%, 41.53% 57.92%, 41.53% 10.38%, 41.95% 7.1%, 44.49% 6.01%, 46.19% 7.1%, 47.03% 9.84%, 46.61% 57.38%, 56.78% 57.38%, 56.78% 10.38%, 58.05% 7.1%, 59.75% 6.01%, 61.86% 7.1%, 62.29% 9.84%, 62.29% 56.83%, 72.46% 56.83%, 72.46% 10.38%, 72.88% 7.1%, 75% 6.01%, 77.12% 7.1%, 77.97% 10.38%, 77.54% 57.38%, 87.29% 57.38%, 87.71% 10.38%, 88.14% 7.1%, 90.25% 6.01%, 92.37% 7.1%, 93.22% 10.38%, 92.37% 57.92%, 94.92% 62.3%, 99.15% 83.61%, 98.73% 89.62%, 97.46% 93.99%, 94.92% 95.63%, 90.68% 95.08%, 89.83% 92.9%, 13.98% 92.9%, 12.29% 95.08%, 7.2% 95.63%, 5.51% 93.44%);
+}
+.gwrt-router-product[src$="/jdcloud-re-cp-02.png"]{
+  clip-path:polygon(1.59% 2.77%, 7.14% 1.85%, 92.86% 1.85%, 98.41% 3.08%, 98.41% 89.85%, 97.22% 92.92%, 94.44% 95.38%, 90.48% 96.92%, 84.92% 98.15%, 76.59% 99.08%, 21.43% 99.08%, 13.1% 98.15%, 8.33% 96.92%, 5.16% 94.77%, 2.78% 92.31%, 1.59% 89.54%);
+}
+.gwrt-router-product[src$="/qihoo-360t7.png"]{
+  clip-path:polygon(2.81% 68.01%, 4.21% 12.59%, 4.78% 9.57%, 6.18% 8.82%, 6.74% 10.83%, 6.46% 69.52%, 9.27% 67.51%, 9.27% 56.42%, 9.83% 53.15%, 11.8% 50.63%, 14.89% 48.36%, 21.35% 47.1%, 21.91% 2.52%, 22.75% 0.76%, 24.44% 0%, 25.56% 0.76%, 26.4% 3.27%, 26.12% 46.35%, 49.16% 46.35%, 49.44% 2.52%, 50% 1.01%, 51.69% 0.25%, 53.37% 1.01%, 53.93% 3.02%, 53.93% 46.35%, 76.4% 46.35%, 76.4% 2.52%, 76.97% 0.76%, 78.65% 0%, 80.06% 0.76%, 80.9% 3.02%, 80.62% 46.35%, 85.67% 47.1%, 89.33% 48.61%, 91.57% 51.13%, 93.26% 54.91%, 93.26% 68.77%, 94.94% 69.77%, 95.22% 9.82%, 96.07% 8.82%, 97.47% 9.57%, 98.6% 13.1%, 98.6% 69.52%, 97.19% 70.78%, 93.82% 70.78%, 93.54% 88.16%, 92.13% 94.21%, 89.33% 96.73%, 85.67% 98.74%, 16.29% 98.74%, 12.08% 96.98%, 9.83% 94.96%, 8.71% 92.19%, 8.71% 69.77%, 7.3% 70.28%, 3.37% 70.28%);
+}
 
 .gwrt-login-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:4px}
 .gwrt-login-choice{appearance:none;display:flex;align-items:center;justify-content:center;width:100%;min-height:48px;padding:12px 16px;border:1px solid transparent;border-radius:var(--radius-lg);font:600 var(--text-base)/1.25 var(--font-sans);cursor:pointer;transition:background .15s,border-color .15s,box-shadow .15s,color .15s,transform .15s}

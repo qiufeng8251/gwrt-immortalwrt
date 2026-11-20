@@ -97,6 +97,9 @@
     "/usr/libexec/gwrt-accelinfo": [
      "exec"
     ],
+    "/usr/libexec/gwrt-ppe-stats": [
+     "exec"
+    ],
     "/usr/libexec/gwrt-coremark status": [
      "exec"
     ],
