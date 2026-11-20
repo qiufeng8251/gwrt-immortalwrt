@@ -31,7 +31,13 @@ config 固化 `CONFIG_KERNEL_DEVMEM`/busybox devmem（Frame Engine 与 CPU PLL/�
 安装清单并从两处 unset 清单移除，种子 config 同步 =y（本地产物不入库）。
 bandix-plus 为 aarch64 预编译 Rust 二进制（压缩包 2.6MB），依赖 zoneinfo-all/
 conntrack/iw 由构建自动解析。用户指示"没有就加入，然后推到 ihu"，改动连同
-NPU 修复一起推 `rothdren-lion/gwrt-immortalwrt` master。
+NPU 修复一起推 `rothdren-lion/gwrt-immortalwrt` master。首次 CI 失败系
+gwrt-device-defaults 缺 wifiroam 文件（继承自 master，已被并行会话
+f146faa08d 修复）。另按用户要求新增 AN758x 专属构建工作流
+`.github/workflows/gwrt-an758x-build.yml`（薄包装复用 gwrt-build.yml，
+device 固定 an758x，运行名 an758x-<版本>）；注意包装层顶层 concurrency
+组名不能与 callee 相同（嵌套同组会秒失败且无 job/日志），当前构建
+run 44644876664 / commit 1cb1a31468db。
 
 2026-11-19 Mesh 回传优化：已组网的有线漏收广播时，核对载波、掉线计数、桥和租约后，
 从 LAN 桥限时探测已配对主 AP；连续失败才回退，新接线仍走原配对检查。重连优先试本次
