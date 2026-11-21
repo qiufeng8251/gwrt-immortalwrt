@@ -99,6 +99,18 @@ if [ -f /etc/config/wifiroam ]; then
 			uci -q set wifiroam.backhaul.ssid=mesh-gwrt && \
 			uci -q set wifiroam.backhaul.key=Abc123abc8888 || exit 1
 	fi
+	# APK-installed configs contain extra sections (alias_sync, etc.) and so
+	# never match the bundled default byte-for-byte.  Treat a backhaul that is
+	# still disabled with no key the same as pristine, otherwise fresh devices
+	# keep the APK's disabled/wifiroam-bh defaults and never start searching
+	# for peers.  An existing key or an explicitly enabled backhaul is kept.
+	bh_enabled="$(uci -q get wifiroam.backhaul.enabled 2>/dev/null)"
+	bh_key="$(uci -q get wifiroam.backhaul.key 2>/dev/null)"
+	if [ "$bh_enabled" = 0 ] && [ -z "$bh_key" ]; then
+		uci -q set wifiroam.backhaul.enabled=1 && \
+			uci -q set wifiroam.backhaul.ssid=mesh-gwrt && \
+			uci -q set wifiroam.backhaul.key=Abc123abc8888 || exit 1
+	fi
 	# Existing configured devices must not be reset to unconfigured on upgrade.
 	set_missing wifiroam.core.enabled 1 || exit 1
 	set_missing wifiroam.core.role unconfigured || exit 1
