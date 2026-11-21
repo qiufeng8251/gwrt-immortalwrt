@@ -27,6 +27,7 @@ check_soc() {
 }
 
 check_soc ipq5332 jdcloud,re-cs-06 qcom,ipq5332
+check_soc rtl9617c tianyi,tyfza1 realtek,rtl9617c
 check_soc mt7981 mediatek,mt7981
 # AN758x: the airoha,an758x compatible is preferred over the en codename,
 # and a board that only carries airoha,en758x still displays the AN name.
