@@ -1,8 +1,9 @@
 #!/bin/sh
 # Install bundled offline APKs once; retry only failed files within this run.
-APKDIR=/usr/share/gwrt/apk
-MARK=/etc/gwrt/wifiroam-apk.done
-LOG=/tmp/gwrt-wifiroam-apk.log
+APKDIR=${GWRT_APK_DIR:-/usr/share/gwrt/apk}
+MARK=${GWRT_APK_MARK:-/etc/gwrt/wifiroam-apk.done}
+LOG=${GWRT_APK_LOG:-/tmp/gwrt-wifiroam-apk.log}
+APKDB=${GWRT_APK_DB:-/lib/apk/db}
 BOARD="$(cat /tmp/sysinfo/board_name 2>/dev/null)"
 
 if [ "$BOARD" = 'jdcloud,re-ss-01' ] && [ "${GWRT_SS01_FIRSTBOOT_WORKER:-0}" != 1 ]; then
@@ -23,11 +24,11 @@ if [ ! -f "$1" ]; then
 fi
 
 i=0
-while [ "$i" -lt 15 ] && [ ! -d /lib/apk/db ]; do
+while [ "$i" -lt 15 ] && [ ! -d "$APKDB" ]; do
 	sleep 1
 	i=$((i + 1))
 done
-[ -d /lib/apk/db ] || exit 1
+[ -d "$APKDB" ] || exit 1
 
 failed=0
 {
@@ -45,7 +46,17 @@ failed=0
 	done
 	for f in "$@"; do
 		echo "--- retry $(basename "$f")"
-		apk add --allow-untrusted --force-non-repository --network=no "$f" 2>&1 || failed=1
+		if apk add --allow-untrusted --force-non-repository --network=no "$f" 2>&1; then
+			continue
+		fi
+		# The bundled offline APKs are built for aarch64_cortex-a53, but some
+		# targets (e.g. Realtek RTL9617C) report aarch64_cortex-a55.  a53 and
+		# a55 are both ARMv8-A, so the payload is compatible; only apk's arch
+		# gate rejects it.  Fall back to the known APK build arch before
+		# giving up.  Pure-script packages and matching-arch targets never
+		# reach this branch, so their behaviour is unchanged.
+		echo "--- retry $(basename "$f") with --arch aarch64_cortex-a53"
+		apk add --arch aarch64_cortex-a53 --allow-untrusted --force-non-repository --network=no "$f" 2>&1 || failed=1
 	done
 } >"$LOG" 2>&1
 
@@ -54,7 +65,7 @@ failed=0
 if [ "$failed" = 0 ] && apk info wifiroam >/dev/null 2>&1 && \
    apk info luci-app-wifiroam >/dev/null 2>&1 && \
    { [ "$BOARD" != 'jdcloud,re-ss-01' ] || apk info luci-i18n-wifiroam-zh-cn >/dev/null 2>&1; }; then
-	mkdir -p /etc/gwrt && echo "ok $(date)" > "$MARK" || exit 1
+	mkdir -p "${MARK%/*}" && echo "ok $(date)" > "$MARK" || exit 1
 	rm -rf "$APKDIR"
 else
 	logger -t gwrt-apk "preset APK install incomplete, see $LOG"
