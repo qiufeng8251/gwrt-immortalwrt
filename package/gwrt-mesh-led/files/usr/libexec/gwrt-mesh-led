@@ -34,6 +34,15 @@ detect_leds() {
 					[ -d "/sys/class/leds/$x" ] && LEDS="$LEDS $x"
 				done
 			fi
+			# Some boards (e.g. Realtek RTL9617C/TYFZA1) expose vendor LED
+			# class names instead of the generic :status colors.  Use the
+			# WPS/pairing LED there, which is what the stock firmware drives
+			# for Mesh pairing.
+			if [ -z "$LEDS" ]; then
+				for x in LED_WPS_G led_wps wps:green wps:blue wps; do
+					[ -d "/sys/class/leds/$x" ] && { LEDS="$x"; break; }
+				done
+			fi
 			;;
 		*) LEDS="$cfg" ;;
 	esac
@@ -123,7 +132,12 @@ fi
 echo $$ >"$PIDFILE"
 
 detect_leds
-[ -n "$LEDS" ] || exit 0
+if [ -z "$LEDS" ]; then
+	# Exit 0 makes procd respawn, which shows up as a crash loop.  A board
+	# with no usable LED simply has nothing to drive, so stay resident.
+	log "no usable LED found; idling"
+	while true; do sleep 3600; done
+fi
 log "driving LEDs:$LEDS"
 
 while true; do
