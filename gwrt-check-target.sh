@@ -14,6 +14,7 @@ cs06              ipq53xx        qualcommbe   ipq53xx    DEVICE_jdcloud_re-cs-06
 cs08              ipq53xx        qualcommbe   ipq53xx    DEVICE_jdcloud_re-cs-08
 be6500            ipq53xx        qualcommbe   ipq53xx    DEVICE_xiaomi_be6500
 xer5              ipq95xx        qualcommbe   ipq95xx    DEVICE_xfinity_xer5
+sbe1v1k           ipq95xx        qualcommbe   ipq95xx    DEVICE_askey_sbe1v1k
 pzl8              ipq5018        qualcommax   ipq50xx    DEVICE_cmcc_pz-l8
 nezha             ipq5018        qualcommax   ipq50xx    DEVICE_jdcloud_ax3000
 cp02              mt7621         ramips       mt7621    DEVICE_jdcloud_re-cp-02
