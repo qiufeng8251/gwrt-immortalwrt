@@ -48,15 +48,15 @@ if [ -f "$TOP/.config" ]; then
 fi
 
 mkdir -p "$TOP/configs"
+# 单 profile 模式（与 xer5/cs06 序列一致）：不用 MULTI_PROFILE，
+# PROFILE 串由 defconfig 从设备符号推导。
 cat >"$OUT" <<EOF
 CONFIG_MODULES=y
 CONFIG_HAVE_DOT_CONFIG=y
 CONFIG_HOST_OS_LINUX=y
 CONFIG_TARGET_qualcommbe=y
 CONFIG_TARGET_qualcommbe_ipq95xx=y
-CONFIG_TARGET_MULTI_PROFILE=y
-CONFIG_TARGET_PER_DEVICE_ROOTFS=y
-$( [ "$DEVICE" = all ] || echo "CONFIG_TARGET_DEVICE_qualcommbe_ipq95xx_DEVICE_${DEVICE}=y" )
+$( [ "$DEVICE" = all ] || echo "CONFIG_TARGET_qualcommbe_ipq95xx_DEVICE_${DEVICE}=y" )
 CONFIG_LINUX_6_18=y
 # honk eBPF 需要 /sys/kernel/btf/vmlinux；与 TYFZA1 相同策略，vmlinux-btf-builtin 占位
 CONFIG_KERNEL_DEBUG_INFO_BTF=y
@@ -69,8 +69,8 @@ EOF
 make defconfig >/dev/null
 
 if [ "$DEVICE" = "all" ]; then
-	sed -i -E "s|^# (CONFIG_TARGET_DEVICE_qualcommbe_ipq95xx_DEVICE_[A-Za-z0-9_.-]+) is not set$|\\1=y|" "$TOP/.config"
-	echo "==> 全设备模式: $(grep -c "^CONFIG_TARGET_DEVICE_qualcommbe_ipq95xx_DEVICE_.*=y$" "$TOP/.config") 个设备"
+	sed -i -E "s|^# (CONFIG_TARGET_qualcommbe_ipq95xx_DEVICE_[A-Za-z0-9_.-]+) is not set$|\\1=y|" "$TOP/.config"
+	echo "==> 全设备模式: $(grep -c "^CONFIG_TARGET_qualcommbe_ipq95xx_DEVICE_.*=y$" "$TOP/.config") 个设备"
 fi
 
 add_pkg() {
@@ -227,7 +227,8 @@ fi
 
 echo
 echo "==> 完成: $OUT"
-echo "==> 设备: $(grep -c "^CONFIG_TARGET_DEVICE_qualcommbe_ipq95xx_DEVICE_.*=y$" "$OUT") 个"
+echo "==> 设备: $(grep -c "^CONFIG_TARGET_qualcommbe_ipq95xx_DEVICE_.*=y$" "$OUT") 个"
+echo "==> profile: $(sed -n 's/^CONFIG_TARGET_PROFILE="\(.*\)"$/\1/p' "$OUT" || echo '空')"
 echo "==> 无线: $(grep -E '^CONFIG_PACKAGE_(kmod-ath11k-ahb|kmod-ath12k|wpad-mbedtls|wifi-scripts)=y$' "$OUT" | tr '\n' ' ')"
 echo "==> 主题: $(grep -E '^CONFIG_PACKAGE_luci-theme-gwrt=y$' "$OUT" || echo '缺失')"
 echo "==> honk: $(grep -E '^CONFIG_PACKAGE_(honk|luci-app-honk|vmlinux-btf)' "$OUT" | tr '\n' ' ')"
