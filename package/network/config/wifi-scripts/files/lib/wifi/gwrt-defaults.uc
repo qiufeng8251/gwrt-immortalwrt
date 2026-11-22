@@ -58,6 +58,23 @@ export function radio_defaults(policy, board, path, band_name, band, rband, chan
 	if (!policy)
 		return null;
 
+	if (band_name == '2g') {
+		let channels = rband.channels ?? band.channels;
+		let ch = int(channel);
+		if (ch < 1 || ch > 14 ||
+		    (type(channels) == 'array' && index(channels, ch) < 0))
+			channel = rband.default_channel ?? 1;
+		// EHT/MLO on 2.4 GHz does not associate reliably on the QCN9274
+		// WSI group; keep the default BSS at HE20 (or the best HT/VHT mode).
+		for (let mode in ['HE20', 'VHT20', 'HT20', 'NOHT']) {
+			if (mode == 'NOHT' ||
+			    (type(band.modes) == 'array' && index(band.modes, mode) >= 0)) {
+				htmode = mode;
+				break;
+			}
+		}
+	}
+
 	if (band_name == '5g') {
 		let channels = rband.channels ?? band.channels;
 		let high = match(board.model?.id ?? '', /^jdcloud,re-(ss-01|cs-02(-gwrt2)?)$/) &&
@@ -98,5 +115,6 @@ export function radio_defaults(policy, board, path, band_name, band, rband, chan
 		country: band_name == '2g' || band_name == '5g' ? policy.country : null,
 		encryption: band_name == '2g' || band_name == '5g' ? 'psk2+ccmp' : null,
 		key: band_name == '2g' || band_name == '5g' ? policy.key : null,
+		disabled: band_name == '6g' && policy.country == 'CN' ? 1 : 0,
 	};
 }

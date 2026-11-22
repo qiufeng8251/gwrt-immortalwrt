@@ -6,7 +6,7 @@ include $(TOPDIR)/rules.mk
 
 PKG_NAME:=gwrt-device-defaults
 PKG_VERSION:=1.0
-PKG_RELEASE:=10
+PKG_RELEASE:=11
 PKG_LICENSE:=GPL-2.0
 
 include $(INCLUDE_DIR)/package.mk
@@ -36,6 +36,7 @@ define Package/gwrt-device-defaults/install
 	$(INSTALL_BIN) ./files/94_gwrt-invalid-mac $(1)/etc/uci-defaults/94_gwrt-invalid-mac
 	$(INSTALL_BIN) ./files/94_gwrt-360t7-factory-mac $(1)/etc/uci-defaults/94_gwrt-360t7-factory-mac
 	$(INSTALL_BIN) ./files/94_gwrt-lan-ip $(1)/etc/uci-defaults/94_gwrt-lan-ip
+	$(INSTALL_BIN) ./files/95_gwrt-wifi-compat $(1)/etc/uci-defaults/95_gwrt-wifi-compat
 	$(INSTALL_BIN) ./files/95_gwrt-wifi-defaults $(1)/etc/uci-defaults/95_gwrt-wifi-defaults
 # 预置离线 apk：wifiroam 三件是纯脚本，全架构通用，常装；
 # ucode-mod-socket 仅 aarch64 目标附带（mipsel 等由 ucode 包直接编入固件）。
@@ -54,6 +55,10 @@ ifneq ($(findstring aarch64,$(ARCH)),)
 endif
 	$(INSTALL_BIN) ./files/gwrt-wifiroam-autopair $(1)/usr/libexec/gwrt-wifiroam-autopair
 	$(INSTALL_BIN) ./files/gwrt-wifiroam-autopair.init $(1)/etc/init.d/gwrt-wifiroam-autopair
+	$(INSTALL_BIN) ./files/gwrt-wifi-late $(1)/usr/libexec/gwrt-wifi-late
+	$(INSTALL_BIN) ./files/gwrt-wifi-late.init $(1)/etc/init.d/gwrt-wifi-late
+	$(INSTALL_DIR) $(1)/etc/rc.d
+	$(LN) ../init.d/gwrt-wifi-late $(1)/etc/rc.d/S99gwrt-wifi-late
 	$(INSTALL_DATA) ./files/wifiroam/*.js $(1)/usr/share/gwrt/wifiroam/
 	$(INSTALL_DATA) ./files/wifiroam/*.uc ./files/wifiroam/wifiroam.css \
 		./files/wifiroam/backhaul-acl.json $(1)/usr/share/gwrt/wifiroam/

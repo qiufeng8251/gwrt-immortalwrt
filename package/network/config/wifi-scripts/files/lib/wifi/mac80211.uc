@@ -114,6 +114,7 @@ set ${s}.channel='${channel}'
 set ${s}.htmode='${htmode}'
 set ${s}.country='${country || ''}'
 set ${s}.num_global_macaddr='${num_global_macaddr || ''}'
+set ${s}.disabled='${product?.disabled ?? 0}'
 
 set ${si}=wifi-iface
 set ${si}.device='${name}'
