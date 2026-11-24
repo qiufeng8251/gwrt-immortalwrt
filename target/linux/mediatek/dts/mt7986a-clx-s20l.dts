@@ -21,9 +21,9 @@
 	};
 
 	chosen {
-		bootargs-override = "root=/dev/fit0 rootwait";
+		/* Stock eMMC GPT: separate kernel + rootfs (not FIT production). */
+		bootargs-override = "root=PARTLABEL=rootfs rootwait";
 		stdout-path = "serial0:115200n8";
-		rootdisk = <&emmc_rootdisk>;
 	};
 
 	memory {
@@ -206,6 +206,10 @@
 			compatible = "block-device";
 
 			partitions {
+				block-partition-env {
+					partname = "u-boot-env";
+				};
+
 				block-partition-factory {
 					partname = "factory";
 
@@ -232,9 +236,9 @@
 					};
 				};
 
-				emmc_rootdisk: block-partition-production {
-					partname = "production";
-				};
+				/* GPT also has fip / kernel / rootfs / permanent_config;
+				 * find_mmc_part() resolves kernel+rootfs by PARTLABEL.
+				 */
 			};
 		};
 	};

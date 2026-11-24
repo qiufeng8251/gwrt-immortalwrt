@@ -191,7 +191,6 @@ platform_do_upgrade() {
 	imou,hx21|\
 	jcg,q30-pro|\
 	clx,s20p|\
-	clx,s20l|\
 	clx,s20m|\
 	jdcloud,re-cp-03|\
 	konka,komi-a31|\
@@ -242,8 +241,8 @@ platform_do_upgrade() {
 	glinet,gl-mt6000|\
 	glinet,gl-x3000|\
 	glinet,gl-xe3000|\
-	clx,s20p|\
 	clx,s20l|\
+	clx,s20p|\
 	clx,s20m|\
 	hiveton,h5000m|\
 	huasifei,wh3000-emmc|\
@@ -489,11 +488,12 @@ platform_check_image() {
 		fit_check_image "$1"
 		return $?
 		;;
+	clx,s20l|\
 	creatlentem,clt-r30b1|\
 	creatlentem,clt-r30b1-112m|\
 	hiveton,h5000m|\
 	nradio,c8-668gl)
-		# tar magic `ustar`
+		# tar magic `ustar` (sysupgrade-tar → kernel + rootfs eMMC parts)
 		magic="$(dd if="$1" bs=1 skip=257 count=5 2>/dev/null)"
 
 		[ "$magic" != "ustar" ] && {
